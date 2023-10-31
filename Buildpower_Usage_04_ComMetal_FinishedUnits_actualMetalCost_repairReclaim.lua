@@ -1,6 +1,6 @@
 function widget:GetInfo()
     return {
-        name    = "Buildpower Usage with multi color bar",
+        name    = "Buildpower Usage with multi color bar 04",
         desc    = "Shows how much of build power is used.",
         author  = "Robert82 and hihoman23",
         date    = "2023",
@@ -10,11 +10,11 @@ function widget:GetInfo()
     }
 end
 
-local metalCostOfCommander = 1250 --NEW  Set your own price for your commander
+local metalCostForCommander = 1250 --NEW  Set your own price for your commander
 
 local myTeamID = Spring.GetMyTeamID()
 
-local unitDefID = Spring.GetUnitDefID(unitID)
+
 
 local glCreateList = gl.CreateList
 local glCallList = gl.CallList
@@ -76,7 +76,7 @@ local function updateUI()
     widgetScale = freeArea[5]
     area[1] = freeArea[1]
     area[2] = freeArea[2]
-    area[3] = freeArea[1] + floor(50 * widgetScale) -- how long shall it be? 40 is about as long as it's hight
+    area[3] = freeArea[1] + floor(150 * widgetScale) -- how long shall it be? 40 is about as long as it's hight
     if area[3] > freeArea[3] then
         area[3] = freeArea[3]
     end
@@ -95,6 +95,7 @@ local function updateUI()
 		end
 		glDeleteList(dlistGuishader)
 	end
+
 	dlistGuishader = glCreateList(function()
 		RectRound(area[1], area[2], area[3], area[4], 5.5 * widgetScale, 0, 0, 1, 1)
 	end)
@@ -116,7 +117,7 @@ local function updateUI()
 		end
         -- color of the text
         if usedBuildPowerPercentage < 20 then
-            color = "\255\255\000\000" --Red  
+            color = "\255\255\20\000" --Red  
         elseif usedBuildPowerPercentage < 40 then
             color = "\255\255\100\000" --Orange
         elseif usedBuildPowerPercentage < 50 then
@@ -129,11 +130,11 @@ local function updateUI()
 
         local _, _, _, income, _, _, _, _ = Spring.GetTeamResources(myTeamID, "metal") 
         metalCostUnusedBuilders = totalMetalCostOfBuilders - metalCostOfUsedBuildPower  --NEW
-        if income*120 < metalCostUnusedBuilders then colorM = "\255\255\000\000" --Red 
+        if D then colorM = "\255\255\20\000" --Red 
         elseif income*80 < metalCostUnusedBuilders then colorM = "\255\255\100\000" --Orange 
         elseif income*40 < metalCostUnusedBuilders then colorM = "\255\255\255\000" --Yellow 
         elseif income*20 < metalCostUnusedBuilders then colorM = "\255\215\230\100" --Yelleen? 
-        else colorM = "\255\000\255\000" --Green end
+        else colorM = "\255\000\255\000" end --Green 
 
         -- draw a bar
         local barWidth = (area[3] - area[1]- 10 * widgetScale)   
@@ -163,7 +164,7 @@ local function updateUI()
             font2:Print(color .. roundedUsedBuildPowerPercentage .. "%", area[1] + (fontSize * 0.42), area[2] + 3.2 * ((area[4] - area[2]) / 4) - (fontSize / 5), fontSize, 'ol')
 
             -- Adding the code to display metalCostUnusedBuilders
-            font2:Print(colorM .. "Metal Cost: " .. metalCostUnusedBuilders, area[3] - (fontSize * 0.42), area[2] + 3.2 * ((area[4] - area[2]) / 4) - (fontSize / 5), fontSize, 'ol')
+            font2:Print(colorM .. "Metal: " .. metalCostUnusedBuilders, area[3] - (fontSize * 0.42), area[2] + 3.2 * ((area[4] - area[2]) / 4) - (fontSize / 5), fontSize, 'or')
 
 
         font2:End()
@@ -216,7 +217,7 @@ end
 
 
 function widget:GameFrame(n)
-    if n % 6 = 0 then
+    if n % 6 == 0 then
         Log("GameFrame(n)")
         gameStarted = true
 
@@ -227,26 +228,31 @@ function widget:GameFrame(n)
         metalCostOfUsedBuildPower = 0 --NEW
 
         for unitID, buildSpeed in pairs(builderUnits) do
+            Log("unitID " ..tostring(unitID))
             totalBuildPower = totalBuildPower + buildSpeed
             Log("totalBuildPower " ..tostring(totalBuildPower))
+            local unitDefID = Spring.GetUnitDefID(unitID)
+            Log("unitDefID " ..tostring(unitDefID))
             local metalCost = UnitDefs[unitDefID].metalCost
-            
+            Log("metalCost " ..tostring(metalCost))
             local unitName = UnitDefs[unitDefID].name               --NEW
             if unitName == "armcom" or unitName == "corcom" then    --NEW
-                 Log1("Commmander found" ..tostring(metalCostForCommander) )
+                 Log("Commmander found" ..tostring(metalCostForCommander) )
                 metalCost = metalCostForCommander                   --NEW
             end
             totalMetalCostOfBuilders = totalMetalCostOfBuilders + metalCost
-
-            foundActivity, _, _, _ = findFirstCommand(unitID, CMD.REPAIR, CMD.RECLAIM, CMD.BUILD, CMD.CAPTURE) --NEW
-            if foundActivity == true then -- Spring.GetUnitIsBuilding(unitID)
+            Log("totalMetalCostOfBuilders " ..tostring(totalMetalCostOfBuilders))
+            foundActivity, _, _, _ = findFirstCommand(unitID, CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE) --NEW
+            Log("foundActivity " ..tostring(foundActivity))
+            -- local foundBuildingWish = findBuildCommand(unitID)
+            if foundActivity == true or Spring.GetUnitIsBuilding(unitID)  then -- foundBuildingWish == true
                 activeBuildPower = activeBuildPower + buildSpeed
-                Log1("activeBuildPower " ..tostring(activeBuildPower))
+                Log("activeBuildPower " ..tostring(activeBuildPower))
                 useBuildPower = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * buildSpeed
                 if useBuildPower and useBuildPower > 0 then
                     usedBuildPower = usedBuildPower + useBuildPower
                     metalCostOfUsedBuildPower = metalCostOfUsedBuildPower+ metalCost*useBuildPower/activeBuildPower --NEW
-                    Log1("usedBuildPower " ..tostring(usedBuildPower))
+                    Log("usedBuildPower " ..tostring(usedBuildPower))
                 end
             end
         end
@@ -327,6 +333,16 @@ function findFirstCommand(unitID, ...) --NEW FUNCTION checks for one of the comm
     return false, nil, nil, nil
 end
 
+function findBuildCommand(unitID)
+    local commands = Spring.GetUnitCommands(unitID, -1)
+    for i = 1, #commands do
+       --Log("Checking command " .. i .. " with id " .. tostring(commands[i].id))
+        if commands[i].id > 0 then
+           return true
+        end
+    end
+    return false
+end
 
 local sec = 0
 function widget:Update(dt)
@@ -383,7 +399,7 @@ function widget:UnitTaken(unitID, unitDefID, unitTeam)
         builderUnits[unitID] = nil
     end
 end
-l
+
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
     if builderUnits[unitID] then
         builderUnits[unitID] = nil
@@ -396,11 +412,10 @@ function widget:Initialize()
     widget:ViewResize()
     if Spring.GetSpectatingState() then
         widgetHandler:RemoveWidget(self)
-        do return end
     end
-    WG['build_power_bar'] = {}
-	WG['build_power_bar'].GetPosition = function()
-		return area
+--    WG['build_power_bar'] = {}
+--	WG['build_power_bar'].GetPosition = function()
+--		return area
     for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do
         InitUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
     end
