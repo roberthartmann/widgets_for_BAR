@@ -824,10 +824,10 @@ end
 
 local function updateResbar(res)  -- xxx position of fixed stuff 
 	local area = resbarArea[res]
-    Log1("res is " ..tostring(res))
-    Log1("Metal Resources: " .. tostring(r['metal']))
-    Log1("Energy Resources: " .. tostring(r['energy']))
-    Log1("BP Resources: " .. tostring(r['BP']))
+    Log("res is " ..tostring(res))
+    Log("Metal Resources: " .. tostring(r['metal']))
+    Log("Energy Resources: " .. tostring(r['energy']))
+    Log("BP Resources: " .. tostring(r['BP']))
 
 	if dlistResbar[res][1] ~= nil then
 		glDeleteList(dlistResbar[res][1])
@@ -999,9 +999,9 @@ local function updateResbar(res)  -- xxx position of fixed stuff
 			WG['tooltip'].AddTooltip(res .. '_share_slider', { resbarDrawinfo[res].barArea[1], shareIndicatorArea[res][2], resbarDrawinfo[res].barArea[3], shareIndicatorArea[res][4] }, Spring.I18N('ui.topbar.resources.shareMetalTooltip'), nil, Spring.I18N('ui.topbar.resources.shareMetalTooltipTitle'))
 		end
         -- xxx tool tips for the rest
-		Log1("==BP? ")
+		Log("==BP? ")
 		if res == "BP" then
-			Log1("tooltip BP ")
+			Log("tooltip BP ")
 			WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, tostring(totalReservedBP ) .." BP is reserved for current and comming projects")
 			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, "you've got " ..tostring(totalBP) .." BP in total")
 			WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] }, tostring(totally_used_BP) .." BP is actually used")
@@ -1423,14 +1423,14 @@ function widget:Update(dt)
             if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
                 -- Entferne die Einheit aus der Liste, wenn sie tot oder ungültig ist
                 builderUnits[unitID] = nil
-                Log1("unitID got deleted" ..tostring(unitID))
+                Log("unitID got deleted" ..tostring(unitID))
             else
                 totalBP = totalBP + current_unit_BP
                 Log("totalBP " ..tostring(totalBP))
                 local unitDefID = Spring.GetUnitDefID(unitID)
                 Log("unitDefID " ..tostring(unitDefID))
                 if not UnitDefs[unitDefID].metalCost then
-                    Log1("did not find UnitDefs[unitDefID].metalCost for the following unit" ..tostring(unitDefID) )
+                    Log("did not find UnitDefs[unitDefID].metalCost for the following unit" ..tostring(unitDefID) )
                     UnitDefs[unitDefID].metalCost =100
                 end
                 local current_unit_metalCost = UnitDefs[unitDefID].metalCost
