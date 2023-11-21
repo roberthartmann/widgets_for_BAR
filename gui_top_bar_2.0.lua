@@ -15,7 +15,7 @@ end
 
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 local metalCostForCommander = 1250 
-local includeFactories = false
+local includeFactories = true
 
 
 
@@ -1413,14 +1413,14 @@ function widget:Update(dt)
             if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
                 -- Entferne die Einheit aus der Liste, wenn sie tot oder ungültig ist
                 builderUnits[unitID] = nil
-                Log("unitID got deleted" ..tostring(unitID))
+                Log1("unitID got deleted" ..tostring(unitID))
             else
                 totalBP = totalBP + current_unit_BP
                 Log("totalBP " ..tostring(totalBP))
                 local unitDefID = Spring.GetUnitDefID(unitID)
                 Log("unitDefID " ..tostring(unitDefID))
                 if not UnitDefs[unitDefID].metalCost then
-                    Log("did not find UnitDefs[unitDefID].metalCost for the following unit" ..tostring(unitDefID) )
+                    Log1("did not find UnitDefs[unitDefID].metalCost for the following unit" ..tostring(unitDefID) )
                     UnitDefs[unitDefID].metalCost =100
                 end
                 local current_unit_metalCost = UnitDefs[unitDefID].metalCost
@@ -1434,9 +1434,10 @@ function widget:Update(dt)
                 totalMetalCostOfBuilders = totalMetalCostOfBuilders + current_unit_metalCost
                 Log("totalMetalCostOfBuilders " ..tostring(totalMetalCostOfBuilders))
                 foundActivity, _ = findBPCommand(unitID, CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD) --NEW
+                local _, currrently_used_M, _,  currrently_used_E = Spring.GetUnitResources(unitID)
                 Log("foundActivity " ..tostring(foundActivity))
                 -- local foundBuildingWish = findBuildCommand(unitID)
-                if foundActivity == true then -- foundBuildingWish == true
+                if foundActivity == true or currrently_used_M > 0 or currrently_used_E > 0 then -- foundBuildingWish == true
                     totalReservedBP = totalReservedBP + current_unit_BP
                     Log("totalReservedBP " ..tostring(totalReservedBP))
                     local builtUnitID = spGetUnitIsBuilding(unitID)
@@ -1465,7 +1466,6 @@ function widget:Update(dt)
                         Log ("EperBP" ..tostring(cost[buildingUnitDefID].EperBP))
                         Log ("MperBP" ..tostring(cost[buildingUnitDefID].MperBP))
                         if addStalling == 1 then
-                            local _, currrently_used_M, _,  currrently_used_E = Spring.GetUnitResources(unitID)
                             Log ("currrently_used_M" ..tostring(currrently_used_M))
                             Log ("currrently_used_E" ..tostring(currrently_used_E))
 
@@ -2651,7 +2651,7 @@ function InitUnit(unitID, unitDefID, unitTeam)
     Log("InitUnit(unitID, unitDefID, unitTeam)")
     local unitDef = UnitDefs[unitDefID]
     if (myTeamID == unitTeam) then
-        if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 then
+        if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
             local isFactory = 0
             Log("isFactory = 0")
             if unitDef.isFactory == true then
@@ -2670,6 +2670,5 @@ function InitUnit(unitID, unitDefID, unitTeam)
         end
     end
 end
-
 
 
