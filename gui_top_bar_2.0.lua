@@ -261,6 +261,8 @@ local allyteamOverflowingMetal = false
 local allyteamOverflowingEnergy = false
 local overflowingMetal = false
 local overflowingEnergy = false
+local stallingMetal = false
+local stallingEnergy = false
 
 local isCommander = {}
 for unitDefID, unitDef in pairs(UnitDefs) do
@@ -697,7 +699,7 @@ local function updateResbarText(res)
 		if not spec and gameFrame > 90 then
 
 			-- display overflow notification
-			if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) then
+			if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) then --xxx
 				if showOverflowTooltip[res] == nil then
 					showOverflowTooltip[res] = os.clock() + 1.1
 				end
@@ -1239,6 +1241,10 @@ local function updateAllyTeamOverflowing()
 	allyteamOverflowingEnergy = false
 	overflowingMetal = false
 	overflowingEnergy = false
+	
+	stallingMetal = false --for bp bar only
+	stallingEnergy = false
+
 	local totalEnergy = 0
 	local totalEnergyStorage = 0
 	local totalMetal = 0
@@ -1246,10 +1252,10 @@ local function updateAllyTeamOverflowing()
 	local energyPercentile, metalPercentile
 	local teams = Spring.GetTeamList(myAllyTeamID)
 	for i, teamID in pairs(teams) do
-		local energy, energyStorage, _, _, _, energyShare, energySent = spGetTeamResources(teamID, "energy")
+		local energy, energyStorage, energyIncome, energyPull, _, energyShare, energySent = spGetTeamResources(teamID, "energy")
 		totalEnergy = totalEnergy + energy
 		totalEnergyStorage = totalEnergyStorage + energyStorage
-		local metal, metalStorage, _, _, _, metalShare, metalSent = spGetTeamResources(teamID, "metal")
+		local metal, metalStorage, metalIncome, metalPull, _, metalShare, metalSent = spGetTeamResources(teamID, "metal")
 		totalMetal = totalMetal + metal
 		totalMetalStorage = totalMetalStorage + metalStorage
 		if teamID == myTeamID then
@@ -1266,6 +1272,20 @@ local function updateAllyTeamOverflowing()
 				if overflowingMetal > 1 then
 					overflowingMetal = 1
 				end
+			end
+			Spring.Echo ("energyIncome " ..tostring(energyIncome))
+			Spring.Echo ("energyPull   " ..tostring(energyPull))
+			Spring.Echo ("energy       " ..tostring(energy))
+			Spring.Echo ("energyStorage       " ..tostring(energyStorage))
+			Spring.Echo ("totalStallingE       " ..tostring(totalStallingE))
+			Spring.Echo ("totalStallingM       " ..tostring(totalStallingM))
+			if metalPull * 3 > metal then
+				stallingMetal = 1
+				Spring.Echo ("stalling Metal")
+			end
+			if energyPull * 3 > energy then
+				stallingEnergy = 1
+				Spring.Echo ("stalling energy")
 			end
 		end
 	end
@@ -1624,23 +1644,23 @@ local function drawResBars()
 		glCallList(dlistResbar[res][1])
 
 		if not spec and gameFrame > 90 then
-			if allyteamOverflowingEnergy then
-				glColor(1, 0, 0, 0.13 * allyteamOverflowingEnergy * blinkProgress)
-			elseif overflowingEnergy then
-				glColor(1, 1, 0, 0.05 * overflowingEnergy * (0.6 + (blinkProgress * 0.4)))
+			if stallingMetal then
+				glColor(0.0, -0.4, -0.4, 0.5 * stallingMetal * blinkProgress)
+			elseif stallingEnergy then
+				glColor(0.2, -0.2, -1, 0.5 * stallingEnergy * blinkProgress)
 			end
-			if allyteamOverflowingEnergy or overflowingEnergy then
+			if stallingMetal or stallingEnergy then
 				glCallList(dlistResbar[res][4])
 			end
 			-- low energy background
-			if r[res][1] < 2000 then
-				local process = (r[res][1] / r[res][2]) * 13
-				if process < 1 then
-					process = 1 - process
-					glColor(0.9, 0.55, 1, 0.08 * process)
-					glCallList(dlistResbar[res][5])
-				end
-			end
+			--if r[res][1] < 2000 then
+			--	local process = (r[res][1] / r[res][2]) * 13
+			--	if process < 1 then
+			--		process = 1 - process
+			--		glColor(0.9, 0.55, 1, 0.08 * process)
+			--		glCallList(dlistResbar[res][5])
+			--	end
+			--end
 		end
 		drawResbarValues(res, updateText)
 		glCallList(dlistResbar[res][6])
