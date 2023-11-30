@@ -1273,12 +1273,6 @@ local function updateAllyTeamOverflowing()
 					overflowingMetal = 1
 				end
 			end
-			Spring.Echo ("energyIncome " ..tostring(energyIncome))
-			Spring.Echo ("energyPull   " ..tostring(energyPull))
-			Spring.Echo ("energy       " ..tostring(energy))
-			Spring.Echo ("energyStorage       " ..tostring(energyStorage))
-			Spring.Echo ("totalStallingE       " ..tostring(totalStallingE))
-			Spring.Echo ("totalStallingM       " ..tostring(totalStallingM))
 			if metalPull * 3 > metal then
 				stallingMetal = 1
 				Spring.Echo ("stalling Metal")
