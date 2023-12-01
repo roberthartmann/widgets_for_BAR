@@ -19,7 +19,7 @@ local pro_mode = true
 -- needed for exact calculations
 local usedBuildPowerData ={}
 local totally_used_BP
-local avgUsedBuildPower
+local avgTotalUsedBP
 local usedBuildPowerPercentage
 
 local totalMetalCostOfBuilders
@@ -32,7 +32,7 @@ local totalBP
 
 local totalReservedBPData = {}
 local totalReservedBP
-local avgtotalReservedBP 
+local avgTotalReservedBP 
 local totalReservedBPPercentage
 
 
@@ -47,6 +47,8 @@ local addStalling = 1
 local unitBuildSpeed = {}
 
 local CMD_PRIORITY = 34571 --low prio builders
+
+local BP = {}
 -- build power/ res calc entries end here
 
 local allowSavegame = true--Spring.Utilities.ShowDevUI()
@@ -261,8 +263,9 @@ local allyteamOverflowingMetal = false
 local allyteamOverflowingEnergy = false
 local overflowingMetal = false
 local overflowingEnergy = false
-local stallingMetal = false
-local stallingEnergy = false
+local playerStallingMetal = false
+local playerStallingEnergy= false
+
 
 local isCommander = {}
 for unitDefID, unitDef in pairs(UnitDefs) do
@@ -699,7 +702,7 @@ local function updateResbarText(res)
 		if not spec and gameFrame > 90 then
 
 			-- display overflow notification
-			if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) then --xxx
+			if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy))then --xxx
 				if showOverflowTooltip[res] == nil then
 					showOverflowTooltip[res] = os.clock() + 1.1
 				end
@@ -722,7 +725,7 @@ local function updateResbarText(res)
 								WG['notifications'].addEvent('YouAreOverflowingMetal')
 							end
 						end
-					else
+					elseif res == 'energy' then
 						text = (allyteamOverflowingEnergy and '   ' .. Spring.I18N('ui.topbar.resources.wastingEnergy') .. '   '  or '   ' .. Spring.I18N('ui.topbar.resources.overflowing') .. '   ')
 						if not supressOverflowNotifs and WG['notifications'] and (not WG.sharedEnergyFrame or WG.sharedEnergyFrame+60 < gameFrame) then
 							if allyteamOverflowingEnergy then
@@ -735,10 +738,17 @@ local function updateResbarText(res)
 								--WG['notifications'].addEvent('YouAreOverflowingEnergy')	-- this annoys the fuck out of em and makes them build energystoages too much
 							end
 						end
+
+					elseif res == 'BP' then -- for bp bar only
+						if playerStallingMetal then
+							text = "   Stalling metal   "
+						else 
+							text = "   Stalling energy   "
+						end
 					end
+
 					local fontSize = (orgHeight * (1 + (ui_scale - 1) / 1.33) / 4) * widgetScale
 					local textWidth = font2:GetTextWidth(text) * fontSize
-
 					-- background
 					local color1, color2
 					if res == 'metal' then
@@ -749,13 +759,21 @@ local function updateResbarText(res)
 							color1 = { 0.35, 0.35, 0.35, 1 }
 							color2 = { 0.25, 0.25, 0.25, 1 }
 						end
-					else
+					elseif res == 'energy' then
 						if allyteamOverflowingEnergy then
 							color1 = { 0.35, 0.1, 0.1, 1 }
 							color2 = { 0.25, 0.05, 0.05, 1 }
 						else
 							color1 = { 0.35, 0.25, 0, 1 }
 							color2 = { 0.25, 0.16, 0, 1 }
+						end
+					elseif res == 'BP' then -- for bp bar only
+						if playerStallingMetal then 
+							color1 = { 0.35, 0.1, 0.1, 1 }
+							color2 = { 0.25, 0.05, 0.05, 1 }
+						else
+							color1 = { 0.35, 0.1, 0.1, 1 }
+							color2 = { 0.25, 0.05, 0.05, 1 }
 						end
 					end
 					RectRound(resbarArea[res][3] - textWidth, resbarArea[res][4] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][4], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
@@ -767,8 +785,16 @@ local function updateResbarText(res)
 							color1 = { 1, 1, 1, 0.25 }
 							color2 = { 1, 1, 1, 0.44 }
 						end
-					else
+					elseif res == 'energy' then
 						if allyteamOverflowingEnergy then
+							color1 = { 1, 0.3, 0.3, 0.25 }
+							color2 = { 1, 0.3, 0.3, 0.44 }
+						else
+							color1 = { 1, 0.88, 0, 0.25 }
+							color2 = { 1, 0.88, 0, 0.44 }
+						end
+					elseif res == 'BP' then -- for bp bar only
+						if playerStallingMetal then
 							color1 = { 1, 0.3, 0.3, 0.25 }
 							color2 = { 1, 0.3, 0.3, 0.44 }
 						else
@@ -1241,48 +1267,73 @@ local function updateAllyTeamOverflowing()
 	allyteamOverflowingEnergy = false
 	overflowingMetal = false
 	overflowingEnergy = false
-	
-	stallingMetal = false --for bp bar only
-	stallingEnergy = false
-
-	local totalEnergy = 0
-	local totalEnergyStorage = 0
+	playerStallingMetal = false
+	playerStallingEnergy = false
 	local totalMetal = 0
 	local totalMetalStorage = 0
-	local energyPercentile, metalPercentile
+	local totalEnergy = 0
+	local totalEnergyStorage = 0
+	local metalPercentile, energyPercentile 
 	local teams = Spring.GetTeamList(myAllyTeamID)
 	for i, teamID in pairs(teams) do
-		local energy, energyStorage, energyIncome, energyPull, _, energyShare, energySent = spGetTeamResources(teamID, "energy")
-		totalEnergy = totalEnergy + energy
-		totalEnergyStorage = totalEnergyStorage + energyStorage
-		local metal, metalStorage, metalIncome, metalPull, _, metalShare, metalSent = spGetTeamResources(teamID, "metal")
+		local metal, metalStorage, metalPull, metalIncome, _, metalShare, metalSent = spGetTeamResources(teamID, "metal")
 		totalMetal = totalMetal + metal
 		totalMetalStorage = totalMetalStorage + metalStorage
+		local energy, energyStorage, energyPull,energyIncome, _, energyShare, energySent = spGetTeamResources(teamID, "energy")
+		totalEnergy = totalEnergy + energy
+		totalEnergyStorage = totalEnergyStorage + energyStorage
 		if teamID == myTeamID then
-			energyPercentile = energySent / totalEnergyStorage
 			metalPercentile = metalSent / totalMetalStorage
-			if energyPercentile > 0.0001 then
-				overflowingEnergy = energyPercentile * (1 / 0.025)
-				if overflowingEnergy > 1 then
-					overflowingEnergy = 1
-				end
-			end
+			energyPercentile = energySent / totalEnergyStorage
 			if metalPercentile > 0.0001 then
 				overflowingMetal = metalPercentile * (1 / 0.025)
 				if overflowingMetal > 1 then
 					overflowingMetal = 1
 				end
 			end
-			if metalPull * 3 > metal then
-				stallingMetal = 1
-				Spring.Echo ("stalling Metal")
+			if energyPercentile > 0.0001 then
+				overflowingEnergy = energyPercentile * (1 / 0.025)
+				if overflowingEnergy > 1 then
+					overflowingEnergy = 1
+				end
 			end
-			if energyPull * 3 > energy then
-				stallingEnergy = 1
-				Spring.Echo ("stalling energy")
+
+
+			-- needed for exact calculations
+			local realMetalPull = metalPull
+			local realEnergyPull = energyPull
+			if BP[6] then
+				totalStallingM = BP[6]
+				totalStallingE = BP[7]
+			end	
+			addStalling = 0 
+			for unitID, current_unit_BP in pairs(builderUnits) do
+				if addStalling == 1 then 
+					break
+				end
+				local prio = checkPriority(unitID)
+				if checkPriority(unitID) == "low" then
+					addStalling = 1
+				end 
+			end
+			if totalStallingM and totalStallingE then
+				if addStalling == 1 then
+					realMetalPull = metalPull + totalStallingM
+					realEnergyPull = energyPull + totalStallingE
+				end 
+			end -- until here
+			local usefulBPFaktorM = metalIncome / realMetalPull
+			local usefulBPFaktorE = energyIncome / realEnergyPull
+			if usefulBPFaktorM < 0.8 and metal < 2 * metalPull then
+				playerStallingMetal = 1
+			end
+
+			if usefulBPFaktorE < 0.8 and energy < 2 * energyPull and not playerStallingMetal then
+				playerStallingEnergy = 1
 			end
 		end
 	end
+
 	energyPercentile = totalEnergy / totalEnergyStorage
 	metalPercentile = totalMetal / totalMetalStorage
 	if energyPercentile > 0.975 then
@@ -1304,7 +1355,7 @@ local sec2 = 0
 local secComCount = 0
 local blinkDirection = true
 local blinkProgress = 0
-local BP = {}
+
 function widget:Update(dt)
 
 	local prevMyTeamID = myTeamID
@@ -1346,7 +1397,7 @@ function widget:Update(dt)
     -- calculations for the exact metal and energy draw value
 
 
-    if gameFrame % 30 == 0 then  
+    if gameFrame % 15 == 0 then  
 		gameStarted = true
 
         totalStallingM = 0
@@ -1356,9 +1407,9 @@ function widget:Update(dt)
         totalReservedBP = 0
         totally_used_BP = 0
         totalMetalCostOfBuilders = 0 
-        metalCostOfUsedBuildPower = 0 --NEW
+        metalCostOfUsedBuildPower = 0
 
-        for unitID, current_unit_BP in pairs(builderUnits) do
+        for unitID, current_unit_BP in pairs(builderUnits) do --calculation of exact pull
             if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
                 builderUnits[unitID] = nil
             else
@@ -1373,7 +1424,6 @@ function widget:Update(dt)
                 if unitName == "armcom" or unitName == "corcom" then    
                 	current_unit_metalCost = metalCostForCommander                   
                 end
-				-- some of this is bp bar only
                 totalMetalCostOfBuilders = totalMetalCostOfBuilders + current_unit_metalCost
                 foundActivity, _ = findBPCommand(unitID, CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD)
                 local _, currrently_used_M, _,  currrently_used_E = Spring.GetUnitResources(unitID)
@@ -1384,7 +1434,7 @@ function widget:Update(dt)
                         addStalling = 0
                         local prio = checkPriority(unitID)
                         if checkPriority(unitID) == "low" then
-                            addStalling = 1 --xxxxxxxxxxxxxxxx jetzt addieren!
+                            addStalling = 1
                         end 
 
                         local buildingUnitDefID = spGetUnitDefID(builtUnitID)
@@ -1394,62 +1444,62 @@ function widget:Update(dt)
                         if addStalling == 1 then
                             local currrently_wanted_M = cost[buildingUnitDefID].MperBP * current_unit_BP
                             local currrently_wanted_E = cost[buildingUnitDefID].EperBP * current_unit_BP
-                            local currrently_wanted_E = cost[buildingUnitDefID].EperBP * current_unit_BP
                             totalStallingM = totalStallingM + currrently_wanted_M - currrently_used_M
                             totalStallingE = totalStallingE + currrently_wanted_E - currrently_used_E
                         end
 
-                        if currently_used_BP and currently_used_BP > 0 then
-                            local metalMake, metalUse, energyMake, energyUse = Spring.GetUnitResources(unitID)
+                        if currently_used_BP and currently_used_BP > 0 then 				-- for bp bar only
+                            local metalMake, metalUse, energyMake, energyUse = Spring.GetUnitResources(unitID) 
                             local unitName = UnitDefs[unitDefID].name
                             totally_used_BP = totally_used_BP + currently_used_BP
-                            metalCostOfUsedBuildPower = metalCostOfUsedBuildPower + current_unit_metalCost * currently_used_BP / current_unit_BP
-                        end
+                            metalCostOfUsedBuildPower = metalCostOfUsedBuildPower + current_unit_metalCost * currently_used_BP / current_unit_BP 
+                        end -- until here
                     end
                 end
             end
         end
+        --totalReservedBPPercentage = 0
+        --if totalBP > 0 then
+        --    totalReservedBPPercentage = (totalReservedBP / totalBP) * 100
+        --end
 
-        totalReservedBPPercentage = 0
-        if totalBP > 0 then
-            totalReservedBPPercentage = (totalReservedBP / totalBP) * 100
-        end
-
-        table.insert(totalReservedBPData, totalReservedBPPercentage)
-        if #totalReservedBPData > 30 then
+        table.insert(totalReservedBPData, totalReservedBP)
+        if #totalReservedBPData > 10 then
             table.remove(totalReservedBPData, 1)
         end
 
-        avgtotalReservedBP = 0
+        avgTotalReservedBP = 0
 
         for _, power in ipairs(totalReservedBPData) do
-            avgtotalReservedBP = avgtotalReservedBP + power
+            avgTotalReservedBP = avgTotalReservedBP + power
         end
-        avgtotalReservedBP = math.floor(avgtotalReservedBP / #totalReservedBPData)
+        avgTotalReservedBP = math.floor(avgTotalReservedBP / #totalReservedBPData)
 
 
+        --usedBuildPowerPercentage = 0
+        --if totalBP > 0 then
+        --    usedBuildPowerPercentage = (totally_used_BP / totalBP) * 100
+        --end
 
-        usedBuildPowerPercentage = 0
-        if totalBP > 0 then
-            usedBuildPowerPercentage = (totally_used_BP / totalBP) * 100
-        end
-
-        table.insert(usedBuildPowerData, usedBuildPowerPercentage)
-        if #usedBuildPowerData > 30 then
+        table.insert(usedBuildPowerData, totally_used_BP)
+        if #usedBuildPowerData > 10 then
             table.remove(usedBuildPowerData, 1)
         end
 
-        avgUsedBuildPower = 0
+        avgTotalUsedBP = 0
         for _, power in ipairs(usedBuildPowerData) do
-            avgUsedBuildPower = avgUsedBuildPower + power
+            avgTotalUsedBP = avgTotalUsedBP + power
         end
 
-        avgUsedBuildPower = math.floor(avgUsedBuildPower / #usedBuildPowerData)      
+        avgTotalUsedBP = math.floor(avgTotalUsedBP / #usedBuildPowerData)
+		
         BP[1] = metalCostOfUsedBuildPower
         BP[2] = totalMetalCostOfBuilders
-        BP[3] = totalReservedBP
+        BP[3] = avgTotalReservedBP
         BP[4] = totalBP
-        BP[5] = totally_used_BP
+        BP[5] = avgTotalUsedBP
+		BP[6] = totalStallingM
+		BP[7] = totalStallingE
     end -- calculations end here 
 	
 	sec = sec + dt
@@ -1567,7 +1617,7 @@ function widget:drawTidal()
 	end
 end
 
-local function drawResBars()
+local function drawResBars() --hadles the blinking
 	glPushMatrix()
 
 	local updateText = os.clock() - updateTextClock > 0.1
@@ -1633,17 +1683,17 @@ local function drawResBars()
 		glCallList(dlistResbar[res][2])
 	end
 
-    res = 'BP' -- for bp bar only still reacts to energy overflow -> could be used for E or M stall!
+    res = 'BP' -- for bp bar only
 	if dlistResbar[res][1] and dlistResbar[res][2] and dlistResbar[res][3] then
 		glCallList(dlistResbar[res][1])
 
 		if not spec and gameFrame > 90 then
-			if stallingMetal then
-				glColor(0.0, -0.4, -0.4, 0.5 * stallingMetal * blinkProgress)
-			elseif stallingEnergy then
-				glColor(0.2, -0.2, -1, 0.5 * stallingEnergy * blinkProgress)
+			if playerStallingMetal then
+				glColor(0.0, -0.4, -0.4, 0.5 * playerStallingMetal * blinkProgress)
+			elseif playerStallingEnergy then
+				glColor(0.2, -0.2, -1, 0.5 * playerStallingEnergy * blinkProgress)
 			end
-			if stallingMetal or stallingEnergy then
+			if playerStallingMetal or playerStallingEnergy then
 				glCallList(dlistResbar[res][4])
 			end
 			-- low energy background
