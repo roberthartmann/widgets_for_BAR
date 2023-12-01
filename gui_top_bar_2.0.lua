@@ -741,9 +741,9 @@ local function updateResbarText(res)
 
 					elseif res == 'BP' then -- for bp bar only
 						if playerStallingMetal then
-							text = "   Stalling metal   "
+							text = "   Stalling on metal   "
 						else 
-							text = "   Stalling energy   "
+							text = "   Stalling on energy   "
 						end
 					end
 
