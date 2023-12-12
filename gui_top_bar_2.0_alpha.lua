@@ -34,7 +34,8 @@ local totalBP
 local totalReservedBPData = {}
 local totalReservedBP
 local avgTotalReservedBP 
-local totalReservedBPPercentage
+local usefulBPFaktorM = 1
+local usefulBPFaktorE = 1
 
 
 local spSetUnitBuildSpeed = Spring.SetUnitBuildSpeed
@@ -911,7 +912,6 @@ local function updateResbar(res)  -- xxx position of fixed stuff
 
 			-- Bar background
 			local addedSize = math_floor(((barArea[4] - barArea[2]) * 0.15) + 0.5)
-			--RectRound(barArea[1] - edgeWidth, barArea[2] - edgeWidth, barArea[3] + edgeWidth, barArea[4] + edgeWidth, barHeight * 0.33, 1, 1, 1, 1, { 1,1,1, 0.03 }, { 1,1,1, 0.03 })
 			local borderSize = 1
 			RectRound(barArea[1] - edgeWidth + borderSize, barArea[2] - edgeWidth + borderSize, barArea[3] + edgeWidth - borderSize, barArea[4] + edgeWidth - borderSize, barHeight * 0.2, 1, 1, 1, 1, { 0,0,0, 0.12 }, { 0,0,0, 0.15 })
 
@@ -929,7 +929,7 @@ local function updateResbar(res)  -- xxx position of fixed stuff
 			glBlending(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 		end)
 
-		dlistResbar[res][2] = glCreateList(function()
+		dlistResbar[res][2] = glCreateList(function() --sliders on top of top bars
 			-- Metalmaker Conversion slider
 			if res == 'energy' then  
 				mmLevel = Spring.GetTeamRulesParam(myTeamID, 'mmLevel')
@@ -950,13 +950,33 @@ local function updateResbar(res)  -- xxx position of fixed stuff
 				UiSliderKnob(math_floor(conversionIndicatorArea[1]+((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2)), math_floor(conversionIndicatorArea[2]+((conversionIndicatorArea[4]-conversionIndicatorArea[2])/2)), math_floor((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2), { 0.95, 0.95, 0.7, 1 })
 
 			end
+			-- show usefulBPFaktor 
+			if res == 'BP' then
+				if usefulBPFaktorM == nil or usefulBPFaktorM > 1 then --be save that the usefulBPFaktorM isn't nil or over 100%
+					usefulBPFaktorM = 1
+				end
+				local texWidth = shareSliderWidth
+				local texHeight = math_floor( shareSliderWidth / 2 ) - 1
+				--put the thing at the rigt position metal
+				glColor(0.8, 0.8, 0.8, 1)
+				glTexture(":lr" .. texWidth .. "," .. texHight .. ":LuaUI/Widgets/topbar/triangle.png") 
+				glTexRect(math_floor(barArea[1] + (usefulBPFaktorM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (usefulBPFaktorM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
+				glTexture(false)
 
+				if usefulBPFaktorE == nil or usefulBPFaktorE > 1 then --be save that the usefulBPFaktorE isn't nil or over 100%
+					usefulBPFaktorE = 1
+				end
+				glColor(1, 1, 0.6, 1)
+				glTexture(":lr" .. texWidth .. "," .. texHight .. ":LuaUI/Widgets/topbar/triangle.png") 
+				glTexRect(math_floor(barArea[1] + (usefulBPFaktorE * barWidth) - (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1, math_floor(barArea[1] + (usefulBPFaktorE * barWidth) + (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd))
+				glTexture(false)
+			end
 			-- Share slider
 			if not isSingle then
-				if res ~= 'BP' then
+				if res ~= 'BP' then --only energy and metal can be shared
 					if res == 'energy' then
 						eneryOverflowLevel = r[res][6]
-					else
+					else --metal
 						metalOverflowLevel = r[res][6]
 					end
 					local value = r[res][6]
@@ -1337,8 +1357,8 @@ local function updateAllyTeamOverflowing()
 				end 
 			end -- until here
 			if not res == "BP" or draw_BP_bar == true then
-				local usefulBPFaktorM = metalIncome / realMetalPull
-				local usefulBPFaktorE = energyIncome / realEnergyPull
+				usefulBPFaktorM = metalIncome / realMetalPull
+				usefulBPFaktorE = energyIncome / realEnergyPull
 				if usefulBPFaktorM < 0.8 and metal < 2 * metalPull then
 					playerStallingMetal = 1
 				end
@@ -1476,10 +1496,6 @@ function widget:Update(dt)
             end
         end
 		if draw_BP_bar == true then
-			--totalReservedBPPercentage = 0
-			--if totalBP > 0 then
-			--    totalReservedBPPercentage = (totalReservedBP / totalBP) * 100
-			--end
 
 			table.insert(totalReservedBPData, totalReservedBP)
 			if #totalReservedBPData > 10 then
@@ -1492,12 +1508,6 @@ function widget:Update(dt)
 				avgTotalReservedBP = avgTotalReservedBP + power
 			end
 			avgTotalReservedBP = math.floor(avgTotalReservedBP / #totalReservedBPData)
-
-
-			--usedBuildPowerPercentage = 0
-			--if totalBP > 0 then
-			--    usedBuildPowerPercentage = (totally_used_BP / totalBP) * 100
-			--end
 
 			table.insert(usedBuildPowerData, totally_used_BP)
 			if #usedBuildPowerData > 10 then
