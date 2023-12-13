@@ -54,7 +54,7 @@ local BP = {}
 
 local allowSavegame = true--Spring.Utilities.ShowDevUI()
 
-local ui_scale = tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
+local ui_scale = 0.85 tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1) -- xxx 
 
 local fontfile = "fonts/" .. Spring.GetConfigString("bar_font", "Poppins-Regular.otf")
 local fontfile2 = "fonts/" .. Spring.GetConfigString("bar_font2", "Exo2-SemiBold.otf")
@@ -70,7 +70,7 @@ local escapeKeyPressesQuit = false
 
 local relXpos = 0.3 
 if drawBPBar == true then
-   relXpos = 0.25
+   relXpos = 0.3
 end
 
 
@@ -831,7 +831,7 @@ local function updateResbar(res)  --decides where and what is drawn
 	local barHeight = math_floor((height * widgetScale / 7) + 0.5)
 	local barHeightPadding = math_floor(((height / 4.4) * widgetScale) + 0.5) --((height/2) * widgetScale) - (barHeight/2)
 	--local barLeftPadding = 2 * widgetScale
-	local barLeftPadding = math_floor(53 * widgetScale)
+	local barLeftPadding = math_floor(47 * widgetScale) --xxx 53*
 	local barRightPadding = math_floor(14.5 * widgetScale)
 	local barArea = { area[1] + math_floor((height * widgetScale) + barLeftPadding), area[2] + barHeightPadding, area[3] - barRightPadding, area[2] + barHeight + barHeightPadding }
 	local sliderHeightAdd = math_floor(barHeight / 1.55)
@@ -888,7 +888,7 @@ local function updateResbar(res)  --decides where and what is drawn
 
 		-- Icon
 		glColor(1, 1, 1, 1)
-		local iconPadding = math_floor((area[4] - area[2]) / 7)
+		local iconPadding = math_floor((area[4] - area[2]) / 9) --xxx /7
 		local iconSize = math_floor(area[4] - area[2] - iconPadding - iconPadding)
 		local bgpaddingHalf = math_floor((bgpadding * 0.5) + 0.5)
 		local texSize = math_floor(iconSize * 2)
@@ -1222,7 +1222,7 @@ function init()
 
 	local width = math_floor(totalWidth / 4.4)
 	if drawBPBar == true then 
-		width = math_floor(totalWidth / 5.5)
+		width = math_floor(totalWidth / 6) --xxx  5.5
 	end
 	resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
