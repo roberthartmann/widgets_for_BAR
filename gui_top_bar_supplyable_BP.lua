@@ -968,18 +968,15 @@ local function updateResbar(res)  --decides where and what is drawn
 			if BP[5] == nil then
 				avgTotalUsedBP = 1
 			end
-
 			if BP[4] == nil then
 				totalBP = 1
 			end
-			--or BP[4] == nil or BP[8] == nil or BP[9] == nil then
-			--	avgTotalReservedBP = 1
-			--	totalBP = 1
-			--	usefulBPFactorM = 1
-			--	usefulBPFactorE = 1
-			--end
-			--local indicatorPosM = usefulBPFactorM
-			--local indicatorPosE = usefulBPFactorE
+			if BP[8] == nil then
+				usefulBPFactorM = 1
+			end
+			if BP[9] == nil then
+				usefulBPFactorE = 1
+			end
 			local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalBP
 			local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalBP
 			if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
