@@ -1354,7 +1354,6 @@ function widget:GameFrame(n)
 		metalCostOfUsedBuildPower = 0
 
 		for unitID, currentUnitBP in pairs(builderUnits) do --calculation of exact pull
-			Spring.Echo (".")
 			if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
 				builderUnits[unitID] = nil
 			else
@@ -1365,7 +1364,6 @@ function widget:GameFrame(n)
 				end
 				local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
 				local unitName = UnitDefs[unitDefID].name
-				Spring.Echo (tostring(UnitDefs[unitDefID].name) .."   unitID" ..tostring(unitID))
 				if unitName == "armcom" or unitName == "corcom" then
 					currentUnitMetalCost = metalCostForCommander
 				end
@@ -1373,7 +1371,6 @@ function widget:GameFrame(n)
 				foundActivity, _ = findBPCommand(unitID, unitDefID, CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD)
 				local _, currrentlyUsedM, _, currrentlyUsedE = Spring.GetUnitResources(unitID)
 				if foundActivity == true or currrentlyUsedM > 0 or currrentlyUsedE > 0 then
-					Spring.Echo ("currentUnitBP " ..tostring(currentUnitBP))
 					totalReservedBP = totalReservedBP + currentUnitBP
 					local builtUnitID = spGetUnitIsBuilding(unitID)
 					if builtUnitID then
@@ -1386,15 +1383,7 @@ function widget:GameFrame(n)
 						local buildingUnitDefID = spGetUnitDefID(builtUnitID)
 						local buildingUnitDef = UnitDefs[buildingUnitDefID] 
 						currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-						--Spring.Echo (tostring(buildingUnitDef[unitDefID].name) .."   unitID" ..tostring(unitID))
-						Spring.Echo ("builtUnitID " ..tostring(builtUnitID))
-						Spring.Echo (".")
-						Spring.Echo ("currrentlyUsedM   " ..tostring(currrentlyUsedM))
-						Spring.Echo ("cost[buildingUnitDefID].MperBP " ..tostring(cost[buildingUnitDefID].MperBP))
 						currentlyUsedBP = currrentlyUsedM/cost[buildingUnitDefID].MperBP
-						Spring.Echo ("currentlyUsedBP2 " ..tostring(currentlyUsedBP))
-						Spring.Echo (".")
-						Spring.Echo (".")
 						--local currrentlyUnproductiveBP = currentUnitBP - currentlyUsedBP
 						if addStalling == true then
 							local currrentlyWantedM = cost[buildingUnitDefID].MperBP * currentUnitBP
@@ -1425,13 +1414,11 @@ function widget:GameFrame(n)
 
 			for _, power in ipairs(totalReservedBPData) do
 				avgTotalReservedBP = avgTotalReservedBP + power
-				Spring.Echo ("Power" ..tostring(power))
-				Spring.Echo ("avgTotalReservedBP" ..tostring(avgTotalReservedBP))
+
 			end
-			Spring.Echo ("#totalReservedBPData" ..tostring(#totalReservedBPData))
+
 			avgTotalReservedBP = math.floor(avgTotalReservedBP / #totalReservedBPData)
-			Spring.Echo ("avgTotalReservedBP" ..tostring(avgTotalReservedBP))
-			Spring.Echo ("..")
+
 
 			table.insert(usedBuildPowerData, totallyUsedBP)
 			if #usedBuildPowerData > 5 then --so a grand total of 10 refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
@@ -2574,9 +2561,9 @@ function findBPCommand(unitID, unitDefID, ...) -- for bp bar only most likely
     local cmdList = {...} 
 	local unitDef = UnitDefs[unitDefID]
 	if unitDef.isFactory == true then
-		--Spring.Echo ("factory found 2")
+
 		if #Spring.GetFactoryCommands(unitID, -1) > 0 then
-			--Spring.Echo ("queue found")
+
 			local firstTime = i
 			return true, firstTime
 		end
