@@ -978,7 +978,7 @@ local function updateResbar(res)  --decides where and what is drawn
 			if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
 				indicatorPosM = 1
 			end
-			local texWidth = shareSliderWidth
+			local texWidth = 1.5 * shareSliderWidth
 			local texHeight = math_floor( shareSliderWidth / 2 ) - 1
 			--put the thing at the rigt position metal
 			glColor(0.8, 0.8, 0.8, 1)
