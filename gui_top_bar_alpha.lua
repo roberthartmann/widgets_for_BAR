@@ -21,6 +21,7 @@ local metalCostForCommander = 1250
 local includeFactories = true 
 local proMode = true
 local drawBPBar = true
+local drawBPIndicators = true
 
 -- needed for exact calculations
 local initData = {0, 0, 0.1, 0, 0, 1, 1, 1, 1}
@@ -942,58 +943,24 @@ local function updateResbar(res)  --decides where and what is drawn
 			end
 			UiSliderKnob(math_floor(conversionIndicatorArea[1]+((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2)), math_floor(conversionIndicatorArea[2]+((conversionIndicatorArea[4]-conversionIndicatorArea[2])/2)), math_floor((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2), { 0.95, 0.95, 0.7, 1 })
 		end
-		--show usefulBPFaktor 
-		if res == 'BP' then
-			Log("sliders")
-			local totalMetalCostOfBuilders = BP[2]
-			local avgTotalReservedBP = BP[3]
-			local totalAvailableBP = BP[4]
-			local avgTotalUsedBP = BP[5]
-			local usefulBPFactorM = BP[8]
-			local usefulBPFactorE = BP[9]
-			
-			if BP[2] == nil then
-				totalMetalCostOfBuilders = 1
-			end
+		--show usefulBPFaktor
+		if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~=0 then 
+			if res == 'BP' then
+				local texWidth = 1.3 * shareSliderWidth
+				local texHeight = math_floor( shareSliderWidth / 2 ) - 1
+				--put the thing at the rigt position metal
+				glColor(0.8, 0.8, 0.8, 1)
+				glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
+				glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
+				glTexture(false)
 
-			if BP[3] == nil then
-				avgTotalReservedBP = 1
-			end
-			if BP[4] == nil then
-				totalAvailableBP = 1
-			end
 
-			if BP[5] == nil then
-				avgTotalUsedBP = 1
+				glColor(1, 1, 0.6, 1)
+				glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
+				glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1)
+				glTexture(false)
+				Log("sliders end")
 			end
-
-			if BP[8] == nil then
-				usefulBPFactorM = 1
-			end
-			if BP[9] == nil then
-				usefulBPFactorE = 1
-			end
-			local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalAvailableBP
-			local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalAvailableBP
-			if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
-				indicatorPosM = 1
-			end
-			local texWidth = 1.3 * shareSliderWidth
-			local texHeight = math_floor( shareSliderWidth / 2 ) - 1
-			--put the thing at the rigt position metal
-			glColor(0.8, 0.8, 0.8, 1)
-			glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-			glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
-			glTexture(false)
-
-			if indicatorPosE == nil or indicatorPosE > 1 then --be save that the usefulBPFactorE isn't nil or over 100%
-				indicatorPosE = 1
-			end
-			glColor(1, 1, 0.6, 1)
-			glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-			glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1)
-			glTexture(false)
-			Log("sliders end")
 		end
 		-- Share slider
 		if not isSingle then
@@ -1355,7 +1322,7 @@ function widget:GameFrame(n)
 				end
 				if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
 					trackedBuilders[unitID] = nil
-					calcTotalMetalCostAndBPOfBuilders()
+					calcTotalMAndBPOfBuilders()
 					trackedNum = trackedNum - 1
 				else
 					--Log("nowChecking" ..nowChecking)
@@ -1402,6 +1369,47 @@ function widget:GameFrame(n)
 		trackPosBase = trackPosBase + unitsPerFrame
 		--Log("trackPosBase-----------------" ..trackPosBase)
 	end
+	if gameFrame % 2 == 0 and drawBPIndicators == true then 
+		local totalMetalCostOfBuilders = BP[2]
+		local avgTotalReservedBP = BP[3]
+		local totalAvailableBP = BP[4]
+		local avgTotalUsedBP = BP[5]
+		local usefulBPFactorM = BP[8]
+		local usefulBPFactorE = BP[9]
+		
+		if BP[2] == nil then
+			totalMetalCostOfBuilders = 1
+		end
+
+		if BP[3] == nil then
+			avgTotalReservedBP = 1
+		end
+		if BP[4] == nil then
+			totalAvailableBP = 1
+		end
+
+		if BP[5] == nil then
+			avgTotalUsedBP = 1
+		end
+
+		if BP[8] == nil then
+			usefulBPFactorM = 1
+		end
+		if BP[9] == nil then
+			usefulBPFactorE = 1
+		end
+		local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalAvailableBP
+		local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalAvailableBP
+		if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
+			indicatorPosM = 1
+		end
+		if indicatorPosE == nil or indicatorPosE > 1 then --be save that the usefulBPFactorE isn't nil or over 100%
+			indicatorPosE = 1
+		end
+		BP[10] == indicatorPosM
+		BP[11] == indicatorPosE
+	end
+
 	--Log("% 2 done")
 	if gameFrame % 15 == 0 then
 		if trackPosBase >= trackedNum then
@@ -2371,7 +2379,7 @@ function widget:PlayerChanged()
     for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do
         InitUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
     end
-	calcTotalMetalCostAndBPOfBuilders()
+	calcTotalMAndBPOfBuilders()
 	if displayComCounter then
 		countComs(true)
 	end
@@ -2407,11 +2415,13 @@ end
 function widget:UnitGiven(unitID, unitDefID, unitTeam)
     InitUnit(unitID, unitDefID, unitTeam)
 	addBuildUnitFromBP(unitID)
+	trackedNum = trackedNum + 1
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
     InitUnit(unitID, unitDefID, unitTeam)
 	addBuildUnitFromBP(unitID)
+	trackedNum = trackedNum + 1
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
@@ -2420,6 +2430,7 @@ function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
 		trackedNum = trackedNum - 1
     end
 	removeBuildUnitFromBP(unitID)
+	
 	if not isCommander[unitDefID] then
 		return
 	end
@@ -2457,7 +2468,7 @@ function widget:Initialize()
 			unitCostData[unitDefID].metal = metalCostForCommander
 		end
     end
-	calcTotalMetalCostAndBPOfBuilders()
+	calcTotalMAndBPOfBuilders()
 	-- determine if we want to show comcounter
 	local allteams = Spring.GetTeamList()
 	local teamN = table.maxn(allteams) - 1               --remove gaia
@@ -2626,8 +2637,8 @@ function InitUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
     end
 end
 
-function calcTotalMetalCostAndBPOfBuilders()
-	Log("calcTotalMetalCostAndBPOfBuilders")
+function calcTotalMAndBPOfBuilders()
+	Log("calcTotalMAndBPOfBuilders")
 	local totalMetalCostOfBuilders = 0
 	local totalAvailableBP = 0
 	for unitID, currentUnitBP in pairs(trackedBuilders) do
