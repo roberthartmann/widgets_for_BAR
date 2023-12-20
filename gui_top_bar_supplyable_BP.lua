@@ -1,6 +1,6 @@
 function widget:GetInfo()
 	return {
-		name = "Top Bar 2.0 supplyable BP", 
+		name = "Top Bar supplyable BP", 
 		desc = "Shows Resources, wind speed, commander counter, and various options.", 
 		author = "Floris and Floris and Floris and Robert82", 
 		date = "Feb, 2017", 
@@ -16,11 +16,18 @@ function Log(Message)
 		Spring.Echo(Message)
 	end
 end
+local Debugmode1 = true
+function Log1(Message)
+	if Debugmode1==true then
+		Spring.Echo(Message)
+	end
+end
 -- for bp bar only
 local metalCostForCommander = 1250 
 local includeFactories = true 
 local proMode = true
 local drawBPBar = true
+local drawBPIndicators = true
 
 -- needed for exact calculations
 local initData = {0, 0, 0.1, 0, 0, 1, 1, 1, 1}
@@ -28,7 +35,7 @@ local initData = {0, 0, 0.1, 0, 0, 1, 1, 1, 1}
 local totalUsedBPData = {} -- used to calculate the avarage used BP
 local totalReservedBPData = {} -- used to calculate the avarage reserved BP
 
-local unitsPerFrame = 200 --limit processed units per frame to improve performance
+local unitsPerFrame = 100 --limit processed units per frame to improve performance
 local trackedNum = 0
 local nowChecking = 0
 local trackPosBase = 0 -- will start the next checks from here
@@ -942,58 +949,32 @@ local function updateResbar(res)  --decides where and what is drawn
 			end
 			UiSliderKnob(math_floor(conversionIndicatorArea[1]+((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2)), math_floor(conversionIndicatorArea[2]+((conversionIndicatorArea[4]-conversionIndicatorArea[2])/2)), math_floor((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2), { 0.95, 0.95, 0.7, 1 })
 		end
-		--show usefulBPFaktor 
-		if res == 'BP' then
-			Log("sliders")
-			local totalMetalCostOfBuilders = BP[2]
-			local avgTotalReservedBP = BP[3]
-			local totalAvailableBP = BP[4]
-			local avgTotalUsedBP = BP[5]
-			local usefulBPFactorM = BP[8]
-			local usefulBPFactorE = BP[9]
-			
-			if BP[2] == nil then
-				totalMetalCostOfBuilders = 1
-			end
+		--show usefulBPFaktor
+		local ignore = false
+		if ignore ~= true then
+			for i = 1, 1 do
+				if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
+				
+					if res == 'BP' then
+						local texWidth = 1.3 * shareSliderWidth
+						local texHeight = math_floor( shareSliderWidth / 2 ) - 1
+						local indicatorPosM = BP[10]
+						local indicatorPosE = BP[11]
+						--put the thing at the rigt position metal
+						glColor(0.8, 0.8, 0.8, 1)
+						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
+						glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
+						glTexture(false)
 
-			if BP[3] == nil then
-				avgTotalReservedBP = 1
-			end
-			if BP[4] == nil then
-				totalAvailableBP = 1
-			end
 
-			if BP[5] == nil then
-				avgTotalUsedBP = 1
+						glColor(1, 1, 0.6, 1)
+						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
+						glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1)
+						glTexture(false)
+						Log("sliders end" ..i)
+					end
+				end
 			end
-
-			if BP[8] == nil then
-				usefulBPFactorM = 1
-			end
-			if BP[9] == nil then
-				usefulBPFactorE = 1
-			end
-			local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalAvailableBP
-			local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalAvailableBP
-			if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
-				indicatorPosM = 1
-			end
-			local texWidth = 1.3 * shareSliderWidth
-			local texHeight = math_floor( shareSliderWidth / 2 ) - 1
-			--put the thing at the rigt position metal
-			glColor(0.8, 0.8, 0.8, 1)
-			glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-			glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
-			glTexture(false)
-
-			if indicatorPosE == nil or indicatorPosE > 1 then --be save that the usefulBPFactorE isn't nil or over 100%
-				indicatorPosE = 1
-			end
-			glColor(1, 1, 0.6, 1)
-			glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-			glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1)
-			glTexture(false)
-			Log("sliders end")
 		end
 		-- Share slider
 		if not isSingle then
@@ -1333,77 +1314,126 @@ function widget:GameFrame(n)
 	
 		-- calculations for the exact metal and energy draw value
 
+	local ignore = false
+	if ignore ~= true then
+		for i = 1, 1 do
+			Log(i .."cache")
+			if gameFrame % 2 == 0 then --refresh rate for BP and stalling calculations
+				gameStarted = true
 
-	if gameFrame % 2 == 0 then --refresh rate for BP and stalling calculations
-		gameStarted = true
+				local cacheTotalStallingM = 0
+				local cacheTotalStallingE = 0
 
-		local cacheTotalStallingM = 0
-		local cacheTotalStallingE = 0
-
-		--local totalAvailableBP = 0
-		local cacheTotalReservedBP = 0
-		local cacheTotallyUsedBP = 0
-		local cacheMetalCostOfUsedBuildPower = 0
-		--local nowChecking = 0 -- counter for trackedUnits per frame
-		--Log("." )
-		--Log("." )
-		--Log("trackedNum" ..trackedNum)
-		for unitID, currentUnitBP in pairs(trackedBuilders) do --calculation of exact pull
-			if (nowChecking >= trackPosBase) then -- begin at trackedPos with calcs
-				if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
-					break
-				end
-				if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
-					trackedBuilders[unitID] = nil
-					calcTotalMetalCostAndBPOfBuilders()
-					trackedNum = trackedNum - 1
-				else
-					--Log("nowChecking" ..nowChecking)
-					--totalAvailableBP = totalAvailableBP + currentUnitBP
-					local unitDefID = spGetUnitDefID(unitID)
-					local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-					local _, currrentlyUsedM, _, currrentlyUsedE = Spring.GetUnitResources(unitID)
-					if foundActivity == true or currrentlyUsedM > 0 or currrentlyUsedE > 0 then
-						cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
-						local builtUnitID = spGetUnitIsBuilding(unitID)
-						if builtUnitID then
-							addStalling = false
-							local prio = checkPriority(unitID)
-							if checkPriority(unitID) == "low" then
-								addStalling = true
-							end 
-							local builtUnitDefID = spGetUnitDefID(builtUnitID)
-							currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-							currentlyUsedBP = currrentlyUsedM / unitCostData[builtUnitDefID].MperBP
-							if addStalling == true then
-								local currrentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
-								local currrentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
-								cacheTotalStallingM = cacheTotalStallingM + currrentlyWantedM - currrentlyUsedM
-								cacheTotalStallingE = cacheTotalStallingE + currrentlyWantedE - currrentlyUsedE
-							end
-							if drawBPBar == true then
-								if currentlyUsedBP and currentlyUsedBP > 0 then 				
-									cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
-									cacheMetalCostOfUsedBuildPower = cacheMetalCostOfUsedBuildPower + unitCostData[unitDefID].metal * currentlyUsedBP / currentUnitBP 
-								end -- until here
+				--local totalAvailableBP = 0
+				local cacheTotalReservedBP = 0
+				local cacheTotallyUsedBP = 0
+				local cacheMetalCostOfUsedBuildPower = 0
+				--local nowChecking = 0 -- counter for trackedUnits per frame
+				--Log("." )
+				--Log("." )
+				--Log("trackedNum" ..trackedNum)
+				for unitID, currentUnitBP in pairs(trackedBuilders) do --calculation of exact pull
+					if (nowChecking >= trackPosBase) then -- begin at trackedPos with calcs
+						if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
+							break
+						end
+						if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
+							InitAllUnits()
+						else
+							--Log("nowChecking" ..nowChecking)
+							--totalAvailableBP = totalAvailableBP + currentUnitBP
+							local unitDefID = spGetUnitDefID(unitID)
+							local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
+							local _, currrentlyUsedM, _, currrentlyUsedE = Spring.GetUnitResources(unitID)
+							if foundActivity == true or currrentlyUsedM > 0 or currrentlyUsedE > 0 then
+								cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+								local builtUnitID = spGetUnitIsBuilding(unitID)
+								if builtUnitID then
+									addStalling = false
+									local prio = checkPriority(unitID)
+									if checkPriority(unitID) == "low" then
+										addStalling = true
+									end 
+									local builtUnitDefID = spGetUnitDefID(builtUnitID)
+									currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
+									currentlyUsedBP = currrentlyUsedM / unitCostData[builtUnitDefID].MperBP
+									if addStalling == true then
+										local currrentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
+										local currrentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
+										cacheTotalStallingM = cacheTotalStallingM + currrentlyWantedM - currrentlyUsedM
+										cacheTotalStallingE = cacheTotalStallingE + currrentlyWantedE - currrentlyUsedE
+									end
+									if drawBPBar == true then
+										if currentlyUsedBP and currentlyUsedBP > 0 then 				
+											cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
+											cacheMetalCostOfUsedBuildPower = cacheMetalCostOfUsedBuildPower + unitCostData[unitDefID].metal * currentlyUsedBP / currentUnitBP 
+										end -- until here
+									end
+								end
 							end
 						end
 					end
+					nowChecking = nowChecking + 1
+					--Log("nowChecking new one" ..nowChecking)
 				end
+				cacheDataBase[1] = cacheDataBase[1] + cacheMetalCostOfUsedBuildPower
+				cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
+				cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
+				cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
+				cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
+				trackPosBase = trackPosBase + unitsPerFrame
+				--Log("trackPosBase-----------------" ..trackPosBase)
 			end
-			nowChecking = nowChecking + 1
-			--Log("nowChecking new one" ..nowChecking)
 		end
-		cacheDataBase[1] = cacheDataBase[1] + cacheMetalCostOfUsedBuildPower
-		cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
-		cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
-		cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
-		cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
-		trackPosBase = trackPosBase + unitsPerFrame
-		--Log("trackPosBase-----------------" ..trackPosBase)
+	end
+	local ignore = false
+	if ignore ~= true then
+		for i = 1, 1 do
+			if gameFrame % 2 == 0 and drawBPIndicators == true then
+				Log(i)
+				local totalMetalCostOfBuilders = BP[2]
+				local avgTotalReservedBP = BP[3]
+				local totalAvailableBP = BP[4]
+				local avgTotalUsedBP = BP[5]
+				local usefulBPFactorM = BP[8]
+				local usefulBPFactorE = BP[9]
+				
+				if BP[2] == nil then
+					totalMetalCostOfBuilders = 1
+				end
+
+				if BP[3] == nil then
+					avgTotalReservedBP = 1
+				end
+				if BP[4] == nil then
+					totalAvailableBP = 1
+				end
+
+				if BP[5] == nil then
+					avgTotalUsedBP = 1
+				end
+
+				if BP[8] == nil then
+					usefulBPFactorM = 1
+				end
+				if BP[9] == nil then
+					usefulBPFactorE = 1
+				end
+				local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalAvailableBP
+				local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalAvailableBP
+				if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
+					indicatorPosM = 1
+				end
+				if indicatorPosE == nil or indicatorPosE > 1 then --be save that the usefulBPFactorE isn't nil or over 100%
+					indicatorPosE = 1
+				end
+				BP[10] = indicatorPosM
+				BP[11] = indicatorPosE
+			end
+		end
 	end
 	--Log("% 2 done")
-	if gameFrame % 15 == 0 then
+	--if gameFrame % 15 == 0 then
 		if trackPosBase >= trackedNum then
 			--Log("show stuff-----------------")
 			local totalReservedBP = cacheDataBase[3]
@@ -1449,7 +1479,7 @@ function widget:GameFrame(n)
 			cacheDataBase[7] = 0
 			nowChecking = 0
 		end
-	end -- calculations end here
+	--end -- calculations end here
 	Log("GameFrame(n)")
 end
 
@@ -2365,13 +2395,7 @@ function widget:PlayerChanged()
 	spec = spGetSpectatingState()
 	checkSelfStatus()
 	numTeamsInAllyTeam = #Spring.GetTeamList(myAllyTeamID)
-    trackedBuilders = nil
-    trackedBuilders = {}
-	trackedNum = 0
-    for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do
-        InitUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
-    end
-	calcTotalMetalCostAndBPOfBuilders()
+	InitAllUnits()
 	if displayComCounter then
 		countComs(true)
 	end
@@ -2397,29 +2421,19 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitTaken(unitID, unitDefID, unitTeam)
-    if trackedBuilders[unitID] then
-        trackedBuilders[unitID] = nil
-		trackedNum = trackedNum - 1
-    end
-	calcTotalMetalCostAndBPOfBuilders()
+	UntrackBuilder(unitID)
 end
 
 function widget:UnitGiven(unitID, unitDefID, unitTeam)
-    InitUnit(unitID, unitDefID, unitTeam)
-	calcTotalMetalCostAndBPOfBuilders()
+    TrackBuilder(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-    InitUnit(unitID, unitDefID, unitTeam)
-	calcTotalMetalCostAndBPOfBuilders()
+    TrackBuilder(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-	if trackedBuilders[unitID] then
-        trackedBuilders[unitID] = nil
-		trackedNum = trackedNum - 1
-    end
-	calcTotalMetalCostAndBPOfBuilders()
+	UntrackBuilder(unitID)	
 	if not isCommander[unitDefID] then
 		return
 	end
@@ -2439,25 +2453,22 @@ end
 function widget:Initialize()
 	gameFrame = Spring.GetGameFrame()
 	Spring.SendCommands("resbar 0")
-    for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do  -- needed for exact calculations
-        InitUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
-    end
-    for unitDefID, unitDef in pairs(UnitDefs) do -- fill unitCostData this is needed for exact calculations
-        local energy = unitDef.energyCost
-        unitCostData[unitDefID] = {
-            buildTime = unitDef.buildTime, 
-            energy = unitDef.energyCost, 
-            metal = unitDef.metalCost, 
-            EperBP = unitDef.energyCost/unitDef.buildTime, 
-            MperBP = unitDef.metalCost/unitDef.buildTime
-        }
+	InitAllUnits()
+	for unitDefID, unitDef in pairs(UnitDefs) do -- fill unitCostData this is needed for exact calculations
+		local energy = unitDef.energyCost
+		unitCostData[unitDefID] = {
+			buildTime = unitDef.buildTime, 
+			energy = unitDef.energyCost, 
+			metal = unitDef.metalCost, 
+			EperBP = unitDef.energyCost/unitDef.buildTime, 
+			MperBP = unitDef.metalCost/unitDef.buildTime
+		}
 		local unitName = UnitDefs[unitDefID].name
 		-- Spezielle Behandlung für Kommandeur-Einheiten
 		if unitName == "armcom" or unitName == "corcom" then
 			unitCostData[unitDefID].metal = metalCostForCommander
 		end
     end
-	calcTotalMetalCostAndBPOfBuilders()
 	-- determine if we want to show comcounter
 	local allteams = Spring.GetTeamList()
 	local teamN = table.maxn(allteams) - 1               --remove gaia
@@ -2607,47 +2618,128 @@ function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likel
     return false, nil
 end
 
-function InitUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
-    local unitDef = UnitDefs[unitDefID]
-    if (myTeamID == unitTeam) then
-        if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
-            local isFactory = false -- is factory is needed for bp bar only (switch metal cost on/off)
-            if unitDef.isFactory == true then
-                isFactory = true
-            end
-            if isFactory == false then
-                trackedBuilders[unitID] = unitDef.buildSpeed
-				trackedNum = trackedNum + 1
-            elseif isFactory == true and includeFactories == true then
-                trackedBuilders[unitID] = unitDef.buildSpeed
-				trackedNum = trackedNum + 1
-            end
-        end
-    end
-end
-
-function calcTotalMetalCostAndBPOfBuilders()
-	Log("calcTotalMetalCostAndBPOfBuilders")
-	local totalMetalCostOfBuilders = 0
-	local totalAvailableBP = 0
-	for unitID, currentUnitBP in pairs(trackedBuilders) do
-		-- Prüfen, ob die Einheit gültig und nicht tot ist
-		if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
-			local unitDefID = Spring.GetUnitDefID(unitID)
-			-- Sicherstellen, dass ein Metallkostenwert vorhanden ist
-			if not UnitDefs[unitDefID].metalCost then
-				UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
+function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculations
+	local unitDef = UnitDefs[unitDefID]
+	if (myTeamID == unitTeam) then
+		if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+			local isFactory = false -- is factory is needed for bp bar only (switch metal cost on/off)
+			if unitDef.isFactory == true then
+				isFactory = true
 			end
-			local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
-			local unitName = UnitDefs[unitDefID].name
-			-- Spezielle Behandlung für Kommandeur-Einheiten
-			if unitName == "armcom" or unitName == "corcom" then
-				currentUnitMetalCost = metalCostForCommander
+			if isFactory == false or (isFactory == true and includeFactories == true) then
+				trackedNum = trackedNum + 1
+				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
+				if not UnitDefs[unitDefID].metalCost then
+					UnitDefs[unitDefID].metalCost = 100 -- Standard value if somthing went wrong
+				end
+				local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
+				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
+				if unitName == "armcom" or unitName == "corcom" then
+					currentUnitMetalCost = metalCostForCommander
+				end
+				BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
+				trackedBuilders[unitID] = unitDef.buildSpeed
+				BP[4] = BP[4] + trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
 			end
-			totalMetalCostOfBuilders = totalMetalCostOfBuilders + currentUnitMetalCost
-			totalAvailableBP = totalAvailableBP + currentUnitBP
 		end
 	end
-	BP[2] = totalMetalCostOfBuilders
-	BP[4] = totalAvailableBP
 end
+
+function UntrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculations
+	local unitDef = UnitDefs[unitDefID]
+	if (myTeamID == unitTeam) then
+		if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+			local isFactory = false -- is factory is needed for bp bar only (switch metal cost on/off)
+			if unitDef.isFactory == true then
+				isFactory = true
+			end
+			if isFactory == false or (isFactory == true and includeFactories == true) then
+				trackedNum = trackedNum - 1
+				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
+				if not UnitDefs[unitDefID].metalCost then
+					UnitDefs[unitDefID].metalCost = 100 -- Standard value if somthing went wrong
+				end
+				local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
+				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
+				if unitName == "armcom" or unitName == "corcom" then
+					currentUnitMetalCost = metalCostForCommander
+				end
+				BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
+				trackedBuilders[unitID] = unitDef.buildSpeed
+				BP[4] = BP[4] - trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
+			end
+		end
+	end
+end
+--function removeBuildUnitFromBP(unitID)
+--	if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
+--		local unitDefID = Spring.GetUnitDefID(unitID)
+--		-- Sicherstellen, dass ein Metallkostenwert vorhanden ist
+--		if not UnitDefs[unitDefID].metalCost then
+--			UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
+--		end
+--		local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
+--		local unitName = UnitDefs[unitDefID].name
+--		-- Spezielle Behandlung für Kommandeur-Einheiten
+--		if unitName == "armcom" or unitName == "corcom" then
+--			currentUnitMetalCost = metalCostForCommander
+--		end
+--		BP[2] = BP[2] - currentUnitMetalCost
+--		BP[4] = BP[4] - currentUnitBP	
+--	end
+--end
+
+function InitAllUnits()
+	BP[2] = 0
+	BP[4] = 0
+	trackedNum = 0
+	trackedBuilders = nil
+    trackedBuilders = {}
+	for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do  -- needed for exact calculations
+		TrackBuilder(unitID, Spring.GetUnitDefID(unitID), myTeamID)
+	end
+end
+
+--function calcTotalMAndBPOfBuilders()
+--	Log("calcTotalMAndBPOfBuilders")
+--	local totalMetalCostOfBuilders = 0
+--	local totalAvailableBP = 0
+--	for unitID, currentUnitBP in pairs(trackedBuilders) do
+--		-- Prüfen, ob die Einheit gültig und nicht tot ist
+--		if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
+--			local unitDefID = Spring.GetUnitDefID(unitID)
+--			-- Sicherstellen, dass ein Metallkostenwert vorhanden ist
+--			if not UnitDefs[unitDefID].metalCost then
+--				UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
+--			end
+--			local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
+--			local unitName = UnitDefs[unitDefID].name
+--			-- Spezielle Behandlung für Kommandeur-Einheiten
+--			if unitName == "armcom" or unitName == "corcom" then
+--				currentUnitMetalCost = metalCostForCommander
+--			end
+--			totalMetalCostOfBuilders = totalMetalCostOfBuilders + currentUnitMetalCost
+--			totalAvailableBP = totalAvailableBP + currentUnitBP
+--		end
+--	end
+--	BP[2] = totalMetalCostOfBuilders
+--	BP[4] = totalAvailableBP
+--end
+
+--function addBuildUnitToBP(unitID)
+--	if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
+--		local unitDefID = Spring.GetUnitDefID(unitID)
+--		-- Sicherstellen, dass ein Metallkostenwert vorhanden ist
+--		if not UnitDefs[unitDefID].metalCost then
+--			UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
+--		end
+--		local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
+--		local unitName = UnitDefs[unitDefID].name
+--		-- Spezielle Behandlung für Kommandeur-Einheiten
+--		if unitName == "armcom" or unitName == "corcom" then
+--			currentUnitMetalCost = metalCostForCommander
+--		end
+--		BP[2] = BP[2] + currentUnitMetalCost
+--		BP[4] = BP[4] + currentUnitBP	
+--	end
+--end
