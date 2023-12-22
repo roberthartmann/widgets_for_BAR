@@ -5,7 +5,7 @@ function widget:GetInfo()
 		author = "Floris and Floris and Floris and Robert82", 
 		date = "Feb, 2017", 
 		license = "GNU GPL, v2 or later", 
-		layer = -999999, 
+		layer = -999980, 
 		enabled = true, --enabled by default
 		handler = true, --can use widgetHandler:x()
 	}
@@ -22,12 +22,124 @@ function Log1(Message)
 		Spring.Echo(Message)
 	end
 end
+
+-------------------------------CONFIG------------------------------------------
+-------------------------------------------------------------------------------
+
+
 -- for bp bar only
-local metalCostForCommander = 1250 
-local includeFactories = true 
-local proMode = true
-local drawBPBar = true
-local drawBPIndicators = true
+local config = {
+	metalCostForCommander = 1250,
+	includeFactories = true,
+	proMode = true,
+	drawBPBar = true,
+	drawBPIndicators = true,
+	autoHideButtons = false
+}
+
+local OPTION_SPECS = {
+	{
+		configVariable = "includeFactories",
+		name = "includeFactories",
+		description = "includeFactories",
+		type = "bool",
+	},
+	{
+		configVariable = "proMode",
+		name = "proMode",
+		description = "proMode",
+		type = "bool",
+	},
+	{
+		configVariable = "drawBPBar",
+		name = "drawBPBar",
+		description = "drawBPBar",
+		type = "bool",
+	},
+	{
+		configVariable = "drawBPIndicators",
+		name = "drawBPIndicators",
+		description = "drawBPIndicators",
+		type = "bool",
+	},
+	{
+		configVariable = "autoHideButtons",
+		name = "autoHideButtons",
+		description = "autoHideButtons",
+		type = "bool",
+	},
+}
+
+local function getOptionId(optionSpec)
+	return "top_bar_bp_" .. optionSpec.configVariable
+end
+
+local function getWidgetName()
+	return widget:GetInfo().name
+end
+
+local function getOptionValue(optionSpec)
+	if optionSpec.type == "slider" then
+		return config[optionSpec.configVariable]
+	elseif optionSpec.type == "bool" then
+		return config[optionSpec.configVariable]
+	elseif optionSpec.type == "select" then
+	-- we have text, we need index
+		for i, v in ipairs(optionSpec.options) do
+			if config[optionSpec.configVariable] == v then
+				return i
+			end
+		end
+	end
+end
+  
+local function setOptionValue(optionSpec, value)
+	if optionSpec.type == "slider" then
+		config[optionSpec.configVariable] = value
+	elseif optionSpec.type == "bool" then
+		config[optionSpec.configVariable] = value
+	elseif optionSpec.type == "select" then
+	-- we have index, we need text
+		config[optionSpec.configVariable] = optionSpec.options[value]
+	end
+end
+  
+  local function createOnChange(optionSpec)
+	return function(i, value, force)
+	  setOptionValue(optionSpec, value)
+	end
+end
+
+local function addOptionFromSpec(optionSpec)
+	local option = table.copy(optionSpec)
+	option.configVariable = nil
+	option.enabled = nil
+	option.id = getOptionId(optionSpec)
+	option.widgetname = getWidgetName()
+	option.value = getOptionValue(optionSpec)
+	option.onchange = createOnChange(optionSpec)
+	WG['options'].addOption(option)
+end
+
+function widget:GetConfigData()
+	local result = {}
+	for _, option in ipairs(OPTION_SPECS) do
+		result[option.configVariable] = getOptionValue(option)
+	end
+	return result
+end
+
+function widget:SetConfigData(data)
+	for _, option in ipairs(OPTION_SPECS) do
+		local configVariable = option.configVariable
+		if data[configVariable] ~= nil then
+			setOptionValue(option, data[configVariable])
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 -- needed for exact calculations
 local initData = {0, 0, 0.1, 0, 0, 1, 1, 1, 1}
@@ -74,7 +186,7 @@ local height = orgHeight * (1 + (ui_scale - 1) / 1.7)
 local escapeKeyPressesQuit = false
 
 local relXpos = 0.3 
-if drawBPBar == true then
+if config.drawBPBar == true then
    relXpos = 0.3
 end
 
@@ -86,7 +198,6 @@ local wholeTeamWastingMetalCount = 0
 
 local noiseBackgroundTexture = ":g:LuaUI/Images/rgbnoise.png"
 local showButtons = true
-local autoHideButtons = false
 
 local playSounds = true
 local leftclick = 'LuaUI/Sounds/tock.wav'
@@ -658,10 +769,10 @@ local function updateResbarText(res)
 				font2:SetTextColor(0.55, 0.55, 0.55, 1)
 			elseif res == 'energy' then
 				font2:SetTextColor(0.57, 0.57, 0.45, 1)
-			elseif res == 'BP' and drawBPBar == true then
+			elseif res == 'BP' and config.drawBPBar == true then
 				font2:SetTextColor(0.45, 0.6, 0.45, 1)
 			end
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then
+			if not (res == 'BP' and config.proMode == false) or config.drawBPBar == true then
 				font2:Print(short(r[res][2]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5])
 			end
 			font2:End()
@@ -687,11 +798,11 @@ local function updateResbarText(res)
 	if addStalling == true and res == 'energy' then
 		r[res][3] = r[res][3] + totalStallingE
 	end -- until here
-	if res ~= 'BP' or drawBPBar == true then
+	if res ~= 'BP' or config.drawBPBar == true then
 		dlistResbar[res][3] = glCreateList(function() 
 			font2:Begin()
 			-- Text: pull
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
+			if not (res == 'BP' and config.proMode == false) or config.drawBPBar == true then -- for bp bar only
 				font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
 			end
 			-- Text: expense
@@ -699,7 +810,7 @@ local function updateResbarText(res)
 			if r[res][3] == r[res][5] then
 				textcolor = "\255\200\140\130"
 			end
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
+			if not (res == 'BP' and config.proMode == false) or config.drawBPBar == true then -- for bp bar only
 				font2:Print(textcolor .. "-" .. short(r[res][5]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
 			end
 			-- income
@@ -709,7 +820,7 @@ local function updateResbarText(res)
 			if not spec and gameFrame > 90 then
 
 				-- display overflow notification
-				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy) and drawBPBar == true)then
+				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy) and config.drawBPBar == true)then
 					if showOverflowTooltip[res] == nil then
 						showOverflowTooltip[res] = os.clock() + 1.1
 					end
@@ -746,7 +857,7 @@ local function updateResbarText(res)
 								end
 							end
 
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
+						elseif res == 'BP' and config.drawBPBar == true then -- for bp bar only
 							if playerStallingMetal then
 								text = "   Stalling on metal   "
 							else 
@@ -774,7 +885,7 @@ local function updateResbarText(res)
 								color1 = { 0.35, 0.25, 0, 1 }
 								color2 = { 0.25, 0.16, 0, 1 }
 							end
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
+						elseif res == 'BP' and config.drawBPBar == true then -- for bp bar only
 							if playerStallingMetal then 
 								color1 = { 0.35, 0.1, 0.1, 1 }
 								color2 = { 0.25, 0.05, 0.05, 1 }
@@ -800,7 +911,7 @@ local function updateResbarText(res)
 								color1 = { 1, 0.88, 0, 0.25 }
 								color2 = { 1, 0.88, 0, 0.44 }
 							end
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
+						elseif res == 'BP' and config.drawBPBar == true then -- for bp bar only
 							if playerStallingMetal then
 								color1 = { 1, 0.3, 0.3, 0.25 }
 								color2 = { 1, 0.3, 0.3, 0.44 }
@@ -853,7 +964,7 @@ local function updateResbar(res)  --decides where and what is drawn
 		resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
 	elseif res == 'energy' then
 		resbarDrawinfo[res].barColor = { 1, 1, 0, 1 }
-	elseif res == 'BP'  and drawBPBar == true then
+	elseif res == 'BP'  and config.drawBPBar == true then
 		resbarDrawinfo[res].barColor = { 0, 1, 0, 1 }
 	end
 	resbarDrawinfo[res].barArea = barArea
@@ -861,7 +972,7 @@ local function updateResbar(res)  --decides where and what is drawn
 	resbarDrawinfo[res].barGlowMiddleTexRect = { resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowLeftTexRect = { resbarDrawinfo[res].barTexRect[1] - (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowRightTexRect = { resbarDrawinfo[res].barTexRect[3] + (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
-	if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
+	if not (res == 'BP' and config.proMode == false) or config.drawBPBar == true then -- for bp bar only
 		resbarDrawinfo[res].textStorage = { "\255\150\150\150" .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
 		resbarDrawinfo[res].textPull = { "\255\210\100\100" .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
 		resbarDrawinfo[res].textExpense = { "\255\210\100\100" .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
@@ -902,7 +1013,7 @@ local function updateResbar(res)  --decides where and what is drawn
 		elseif res == 'energy' then
 
 			glTexture(":lr" ..texSize ..", " ..texSize ..":LuaUI/Images/energy.png") 
-		elseif drawBPBar == true then
+		elseif config.drawBPBar == true then
 			glColor(0.8, 1, 0.8, 1)
 			glTexture(":lr" ..texSize ..", " ..texSize ..":LuaUI/Widgets/topbar/BP.png") --for bp bar only
 		end
@@ -953,7 +1064,7 @@ local function updateResbar(res)  --decides where and what is drawn
 		local ignore = false
 		if ignore ~= true then
 			for i = 1, 1 do
-				if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
+				if config.drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
 				
 					if res == 'BP' then
 						local texWidth = 1.3 * shareSliderWidth
@@ -1017,15 +1128,15 @@ local function updateResbar(res)  --decides where and what is drawn
 		else
 			WG['tooltip'].AddTooltip(res .. '_share_slider', { resbarDrawinfo[res].barArea[1], shareIndicatorArea[res][2], resbarDrawinfo[res].barArea[3], shareIndicatorArea[res][4] }, Spring.I18N('ui.topbar.resources.shareMetalTooltip'), nil, Spring.I18N('ui.topbar.resources.shareMetalTooltipTitle'))
 		end
-		if res == 'BP' and drawBPBar == true then -- for bp bar only
-			if not (res == 'BP' and proMode == false) then -- too much info for some users while early testing
+		if res == 'BP' and config.drawBPBar == true then -- for bp bar only
+			if not (res == 'BP' and config.proMode == false) then -- too much info for some users while early testing
 				WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] }, tostring(totallyUsedBP) .." BP is actually used")
 				WG['tooltip'].AddTooltip(res .. '_storage', { resbarDrawinfo[res].textStorage[2] - (resbarDrawinfo[res].textStorage[4] * 2.75), resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3] + resbarDrawinfo[res].textStorage[4] }, "all your building units cost " ..tostring(totalMetalCostOfBuilders ) .." metal in total")
 				WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, tostring(avgTotalReservedBP ) .." BP is reserved for current and comming projects")
 			end
 			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, "you've got " ..tostring(totalAvailableBP) .." BP in total")
 			WG['tooltip'].AddTooltip(res .. '_Current', { resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.75), resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4] }, "your idling BP is costing you " ..tostring(currentResValue[res]) .."s of metal income. Consider less BP if this number is above 20")
-		elseif res ~= 'BP' or drawBPBar == true then
+		elseif res ~= 'BP' or config.drawBPBar == true then
 			WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, Spring.I18N('ui.topbar.resources.pullTooltip', { resource = resourceName }))  
 			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, Spring.I18N('ui.topbar.resources.incomeTooltip', { resource = resourceName })) 
 			WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] }, Spring.I18N('ui.topbar.resources.expenseTooltip', { resource = resourceName })) 
@@ -1037,7 +1148,7 @@ end
 
 local function drawResbarValues(res, updateText) --drawing the bar itself and value of stored res
 	Log("drawResbarValues")
-	if res ~= 'BP' or drawBPBar == true then
+	if res ~= 'BP' or config.drawBPBar == true then
 		local cappedCurRes = r[res][1]    -- limit so when production dies the value wont be much larger than what you can store
     
 		if r[res][1] > r[res][2] * 1.07 then
@@ -1048,7 +1159,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 		local barWidth = resbarDrawinfo[res].barArea[3] - resbarDrawinfo[res].barArea[1]
 		local valueWidth 
 		local additionalWidth = 0  
-		if res == 'BP' and drawBPBar == true then -- for bp bar only
+		if res == 'BP' and config.drawBPBar == true then -- for bp bar only
 			valueWidth = math_floor(((r[res][5] / r[res][4]) * barWidth))
 			if valueWidth > barWidth then
 				valueWidth = barWidth
@@ -1076,7 +1187,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 					color1 = { 0.5, 0.45, 0, 1 }
 					color2 = { 0.8, 0.75, 0, 1 }
 					glowAlpha = 0.035 + (0.07 * math_min(1, cappedCurRes / r[res][2] * 40))
-				elseif drawBPBar == true then -- for bp bar only
+				elseif config.drawBPBar == true then -- for bp bar only
 					color1 = { 0.2, 0.65, 0, 1 }
 					color2 = { 0.5, 0.75, 0, 1 }
 					glowAlpha = 0.035 + (0.06 * math_min(1, cappedCurRes / r[res][2] * 40))
@@ -1096,7 +1207,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 				DrawRect((resbarDrawinfo[res].barGlowMiddleTexRect[1] + valueWidth) + (glowSize * 3), resbarDrawinfo[res].barGlowRightTexRect[2], resbarDrawinfo[res].barGlowMiddleTexRect[1] + valueWidth, resbarDrawinfo[res].barGlowRightTexRect[4], 0.008)
 				glTexture(false)
 
-				if res == 'BP' and drawBPBar == true then -- for bp bar only
+				if res == 'BP' and config.drawBPBar == true then -- for bp bar only
 					local color1Secondary = { 0.1, 0.55, 0, 0.5 } 
 					local color2Secondary = { 0.3, 0.65, 0, 0.5 }
 					RectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth + additionalWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 1, 1, 1, 1, color1Secondary, color2Secondary)
@@ -1116,7 +1227,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 		end
 		glCallList(dlistResValuesBar[res][uniqueKey]) --uniqueKey for bp bar only
 
-		if res == 'energy' or (res == 'BP' and drawBPBar == true) then --  or... is for bp bar only
+		if res == 'energy' or (res == 'BP' and config.drawBPBar == true) then --  or... is for bp bar only
 			-- energy flow effect
 			gl.Color(1, 1, 1, 0.33)
 			glBlending(GL_SRC_ALPHA, GL_ONE)
@@ -1135,7 +1246,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 		if updateText then
 			currentResValue[res] = short(cappedCurRes)
 			if not dlistResValues[res][currentResValue[res]] then
-				if res == 'BP' and drawBPBar == true then
+				if res == 'BP' and config.drawBPBar == true then
 					local _, _, _, incomeMetal, _ = spGetTeamResources(myTeamID, 'metal')
 					if incomeMetal and incomeMetal ~= 0 then
 						currentResValue[res] = math_floor((r[res][2] - r[res][1]) / incomeMetal)
@@ -1150,7 +1261,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 						font2:SetTextColor(0.95, 0.95, 0.95, 1)
 					elseif  res == 'energy' then
 						font2:SetTextColor(1, 1, 0.74, 1)
-					elseif drawBPBar == true then  -- for bp bar only
+					elseif config.drawBPBar == true then  -- for bp bar only
 						local color 
 						if currentResValue[res] > 120 then color = { 0.82, 0.39, 0.39, 1.0 } --Red 
 						elseif currentResValue[res] > 80 then color = { 1.0, 0.39, 0.39, 1.0 } --Orange 
@@ -1159,7 +1270,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 						else color = {0.0, 1.0, 0.39, 1.0} end --Green 
 						font2:SetTextColor(color[1], color[2], color[3], color[4])
 					end
-					if res == 'BP' and drawBPBar == true then -- for bp bar only
+					if res == 'BP' and config.drawBPBar == true then -- for bp bar only
 						font2:SetOutlineColor(0, 0, 0, 1)
 						font2:Print(currentResValue[res] .."s", resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
 						font2:End()
@@ -1171,7 +1282,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 				end)
 			end
 		end
-		if res ~= 'BP' or drawBPBar == true then
+		if res ~= 'BP' or config.drawBPBar == true then
 			if dlistResValues[res][currentResValue[res]] then
 				glCallList(dlistResValues[res][currentResValue[res]])
 			end
@@ -1182,7 +1293,7 @@ end
 
 function init()
 	r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') } }
-	if drawBPBar == true then
+	if config.drawBPBar == true then
 		r['BP'] = initData
 	end
 
@@ -1194,7 +1305,7 @@ function init()
 	-- metal
 
 	local width = math_floor(totalWidth / 4.4)
-	if drawBPBar == true then 
+	if config.drawBPBar == true then 
 		width = math_floor(totalWidth / 6) --xxx  5.5
 	end
 	resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
@@ -1205,7 +1316,7 @@ function init()
 	resbarArea['energy'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar('energy')
-	if drawBPBar == true then
+	if config.drawBPBar == true then
 		resbarArea['BP'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 		filledWidth = filledWidth + width + widgetSpaceMargin
 		updateResbar('BP')
@@ -1252,7 +1363,7 @@ function init()
 
 	updateResbarText('metal')
 	updateResbarText('energy')
-	if drawBPBar == true then
+	if config.drawBPBar == true then
 		updateResbarText('BP')
 	end
 end
@@ -1363,7 +1474,7 @@ function widget:GameFrame(n)
 										cacheTotalStallingM = cacheTotalStallingM + currrentlyWantedM - currrentlyUsedM
 										cacheTotalStallingE = cacheTotalStallingE + currrentlyWantedE - currrentlyUsedE
 									end
-									if drawBPBar == true then
+									if config.drawBPBar == true then
 										if currentlyUsedBP and currentlyUsedBP > 0 then 				
 											cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
 											cacheMetalCostOfUsedBuildPower = cacheMetalCostOfUsedBuildPower + unitCostData[unitDefID].metal * currentlyUsedBP / currentUnitBP 
@@ -1389,7 +1500,7 @@ function widget:GameFrame(n)
 	local ignore = false
 	if ignore ~= true then
 		for i = 1, 1 do
-			if gameFrame % 2 == 0 and drawBPIndicators == true then
+			if gameFrame % 2 == 0 and config.drawBPIndicators == true then
 				Log(i)
 				local totalMetalCostOfBuilders = BP[2]
 				local avgTotalReservedBP = BP[3]
@@ -1439,7 +1550,7 @@ function widget:GameFrame(n)
 			local totalReservedBP = cacheDataBase[3]
 			local totallyUsedBP = cacheDataBase[5]
 			trackPosBase = 0
-			if drawBPBar == true then --this section will smooth the values so that factories that finish units won't have too much of an impact
+			if config.drawBPBar == true then --this section will smooth the values so that factories that finish units won't have too much of an impact
 				table.insert(totalReservedBPData, totalReservedBP)
 				if #totalReservedBPData > 5 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
 					table.remove(totalReservedBPData, 1)
@@ -1544,7 +1655,7 @@ local function updateAllyTeamOverflowing()
 					realEnergyPull = energyPull + totalStallingE
 				end 
 			end -- until here
-			if res ~= 'BP' or drawBPBar == true then
+			if res ~= 'BP' or config.drawBPBar == true then
 				local usefulBPFactorM = metalIncome / realMetalPull
 				local usefulBPFactorE = energyIncome / realEnergyPull
 				BP[8] = usefulBPFactorM
@@ -1631,7 +1742,7 @@ function widget:Update(dt)
 		sec = 0
 		r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') }, BP = BP }
 		if not spec and not showQuitscreen then
-			if drawBPBar == true then
+			if config.drawBPBar == true then
 				if math_isInRect(mx, my, resbarArea['BP'][1], resbarArea['BP'][2], resbarArea['BP'][3], resbarArea['BP'][4]) then -- for bp bar only
 					if resbarHover == nil then
 						resbarHover = 'BP'
@@ -1666,7 +1777,7 @@ function widget:Update(dt)
 			draggingConversionIndicatorValue = nil
 			updateResbar('metal')
 			updateResbar('energy')
-			if drawBPBar == true then
+			if config.drawBPBar == true then
 				updateResbar('BP') 
 			end
 		else
@@ -1690,7 +1801,7 @@ function widget:Update(dt)
 		sec2 = 0
 		updateResbarText('metal')
 		updateResbarText('energy')
-		if drawBPBar == true then
+		if config.drawBPBar == true then
 			updateResbarText('BP') 
 		end
 		updateAllyTeamOverflowing()
@@ -1815,7 +1926,7 @@ local function drawResBars() --hadles the blinking
 		glCallList(dlistResbar[res][3])
 		glCallList(dlistResbar[res][2])
 	end
-	if drawBPBar == true then
+	if config.drawBPBar == true then
 		res = 'BP' -- for bp bar only
 		if dlistResbar[res][1] and dlistResbar[res][2] and dlistResbar[res][3] then
 			glCallList(dlistResbar[res][1])
@@ -1894,7 +2005,7 @@ function widget:DrawScreen()
 		glCallList(dlistComs2)
 	end
 
-	if autoHideButtons then
+	if config.autoHideButtons then
 		if buttonsArea[1] and math_isInRect(mx, my, buttonsArea[1], buttonsArea[2], buttonsArea[3], buttonsArea[4]) then
 			if not showButtons then
 				showButtons = true
@@ -2451,6 +2562,14 @@ function widget:LanguageChanged()
 end
 
 function widget:Initialize()
+	if widgetHandler:IsWidgetKnown("Top Bar") then
+		widgetHandler:DisableWidget("Top Bar")
+	end
+	
+	for _, optionSpec in ipairs(OPTION_SPECS) do
+		addOptionFromSpec(optionSpec)
+	end
+
 	gameFrame = Spring.GetGameFrame()
 	Spring.SendCommands("resbar 0")
 	InitAllUnits()
@@ -2466,7 +2585,7 @@ function widget:Initialize()
 		local unitName = UnitDefs[unitDefID].name
 		-- Spezielle Behandlung für Kommandeur-Einheiten
 		if unitName == "armcom" or unitName == "corcom" then
-			unitCostData[unitDefID].metal = metalCostForCommander
+			unitCostData[unitDefID].metal = config.metalCostForCommander
 		end
     end
 	-- determine if we want to show comcounter
@@ -2483,13 +2602,13 @@ function widget:Initialize()
 	WG['topbar'].hideWindows = function()
 		hideWindows()
 	end
-	WG['topbar'].setAutoHideButtons = function(value)
-		autoHideButtons = value
+	WG['topbar'].setautoHideButtons = function(value)
+		config.autoHideButtons = value
 		showButtons = not value
 		updateButtons()
 	end
-	WG['topbar'].getAutoHideButtons = function()
-		return autoHideButtons
+	WG['topbar'].getautoHideButtons = function()
+		return config.autoHideButtons
 	end
 	WG['topbar'].getShowButtons = function()
 		return showButtons
@@ -2531,7 +2650,7 @@ function shutdown()
 		for n, _ in pairs(dlistResbar['energy']) do
 			dlistResbar['energy'][n] = glDeleteList(dlistResbar['energy'][n])
 		end
-		if drawBPBar == true then
+		if config.drawBPBar == true then
 			for n, _ in pairs(dlistResbar['BP']) do
 				dlistResbar['BP'][n] = glDeleteList(dlistResbar['BP'][n])
 			end
@@ -2573,24 +2692,21 @@ function shutdown()
 		WG['tooltip'].RemoveTooltip(res .. '_storage')
 		WG['tooltip'].RemoveTooltip(res .. '_current')
 	end
+	
+	if WG['options'] ~= nil then
+		for _, option in ipairs(OPTION_SPECS) do
+			WG['options'].removeOption(getOptionId(option))
+		end
+	end
 end
 
 function widget:Shutdown()
 	Spring.SendCommands("resbar 1")
+	if widgetHandler:IsWidgetKnown("Top Bar") then
+		widgetHandler:EnableWidget("Top Bar")
+	end
 	shutdown()
 	WG['topbar'] = nil
-end
-
-function widget:GetConfigData()
-	return {
-		autoHideButtons = autoHideButtons
-	}
-end
-
-function widget:SetConfigData(data)
-	if data.autoHideButtons ~= nil then
-		autoHideButtons = data.autoHideButtons
-	end
 end
 
 
@@ -2626,7 +2742,7 @@ function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculati
 			if unitDef.isFactory == true then
 				isFactory = true
 			end
-			if isFactory == false or (isFactory == true and includeFactories == true) then
+			if isFactory == false or (isFactory == true and config.includeFactories == true) then
 				trackedNum = trackedNum + 1
 				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
 				if not UnitDefs[unitDefID].metalCost then
@@ -2635,7 +2751,7 @@ function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculati
 				local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
 				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
 				if unitName == "armcom" or unitName == "corcom" then
-					currentUnitMetalCost = metalCostForCommander
+					currentUnitMetalCost = config.metalCostForCommander
 				end
 				BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
 				trackedBuilders[unitID] = unitDef.buildSpeed
@@ -2653,7 +2769,7 @@ function UntrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calcula
 			if unitDef.isFactory == true then
 				isFactory = true
 			end
-			if isFactory == false or (isFactory == true and includeFactories == true) then
+			if isFactory == false or (isFactory == true and config.includeFactories == true) then
 				trackedNum = trackedNum - 1
 				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
 				if not UnitDefs[unitDefID].metalCost then
@@ -2662,7 +2778,7 @@ function UntrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calcula
 				local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
 				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
 				if unitName == "armcom" or unitName == "corcom" then
-					currentUnitMetalCost = metalCostForCommander
+					currentUnitMetalCost = config.metalCostForCommander
 				end
 				BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
 				trackedBuilders[unitID] = unitDef.buildSpeed
@@ -2682,7 +2798,7 @@ end
 --		local unitName = UnitDefs[unitDefID].name
 --		-- Spezielle Behandlung für Kommandeur-Einheiten
 --		if unitName == "armcom" or unitName == "corcom" then
---			currentUnitMetalCost = metalCostForCommander
+--			currentUnitMetalCost = config.metalCostForCommander
 --		end
 --		BP[2] = BP[2] - currentUnitMetalCost
 --		BP[4] = BP[4] - currentUnitBP	
@@ -2716,7 +2832,7 @@ end
 --			local unitName = UnitDefs[unitDefID].name
 --			-- Spezielle Behandlung für Kommandeur-Einheiten
 --			if unitName == "armcom" or unitName == "corcom" then
---				currentUnitMetalCost = metalCostForCommander
+--				currentUnitMetalCost = config.metalCostForCommander
 --			end
 --			totalMetalCostOfBuilders = totalMetalCostOfBuilders + currentUnitMetalCost
 --			totalAvailableBP = totalAvailableBP + currentUnitBP
@@ -2737,7 +2853,7 @@ end
 --		local unitName = UnitDefs[unitDefID].name
 --		-- Spezielle Behandlung für Kommandeur-Einheiten
 --		if unitName == "armcom" or unitName == "corcom" then
---			currentUnitMetalCost = metalCostForCommander
+--			currentUnitMetalCost = config.metalCostForCommander
 --		end
 --		BP[2] = BP[2] + currentUnitMetalCost
 --		BP[4] = BP[4] + currentUnitBP	
