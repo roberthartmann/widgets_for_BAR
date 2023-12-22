@@ -35,4 +35,3 @@ The widget calculates how much you're lagging in utilizing your build power (BP)
 
 ## Feedback and Contributions
 Your feedback and contributions are welcome! Feel free to raise issues or submit pull requests on our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR).
-# Top Bar Widget for BAR
