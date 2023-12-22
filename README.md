@@ -3,7 +3,7 @@
 Enhance your gaming experience with the new top bar widget for BAR (Battlefield: Advanced Robotics)! This widget offers a streamlined and informative interface, providing critical insights during gameplay.
 
 ## Features
-- **Efficiency Indicator**: Easily understand your resource utilization with a color-coded system.
+- **Efficiency Indicator**: Easily understand your build power resource utilization with a color-coded system.
 - **Time You Are Behind Calculation**: Instantly know how efficiently you're using your build power (BP).
 
 ## Installation Guide
@@ -11,7 +11,7 @@ Enhance your gaming experience with the new top bar widget for BAR (Battlefield:
 ### Step 1: Download the Widget
 First, download the `gui_top_bar_2.0.lua` file from our [GitHub repository](# Top Bar Widget for BAR
 
-Enhance your gaming experience with the new top bar widget for BAR (Battlefield: Advanced Robotics)! This widget offers a streamlined and informative interface, providing critical insights during gameplay.
+Enhance your gaming experience with the new top bar widget for BAR (Beyond All Reason)! This widget offers a streamlined and informative interface, providing critical insights during gameplay.
 
 ## Features
 - **Efficiency Indicator**: Easily understand your resource utilization with a color-coded system.
