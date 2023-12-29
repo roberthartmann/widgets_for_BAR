@@ -6,6 +6,9 @@ Enhance your gaming experience with the new top bar widget for BAR (Beyond All R
 - **Efficiency Indicator**: Easily understand your build power resource utilization with a color-coded system.
 - **Time You Are Behind Calculation**: Instantly know how efficiently you're using your build power (BP).
 
+## Versions
+The Version `gui_top_bar_supplyable_BP.lua` is the current one :)
+
 ## Installation Guide
 
 ### Step 1: Download the Widget
