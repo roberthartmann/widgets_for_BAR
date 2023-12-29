@@ -12,7 +12,7 @@ Enhance your gaming experience with the new top bar widget for BAR (Beyond All R
 First, download the `gui_top_bar_supplyable_BP.lua` file from our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR/blob/main/gui_top_bar_supplyable_BP.lua).
 
 ### Step 2: Place the Widget File
-Place the downloaded file into your widgets folder. The path should be `your_bar_folder/luaui/widgets`.
+Place the downloaded file into your widgets folder. The path should be `your_bar_folder/data/luaui/widgets`.
 
 ### Step 3: Download the Required Image
 Download the necessary image, `BP.png` and `triangle.png`, from [here](https://github.com/roberthartmann/widgets_for_BAR/blob/main/BP.png) and [here](https://github.com/roberthartmann/widgets_for_BAR/blob/main/triangle.png) and store it in the `Widgets/topbar` folder.
@@ -25,6 +25,9 @@ After activating the new top bar, reactivate any widgets that are positioned bes
 
 ### Step 6: Understanding the Widget
 To fully benefit from the widget, it's crucial to understand its functionalities. Refer to the pictures and descriptions in our repository to get a comprehensive understanding.
+
+Here is a picture for you to better understand how to read it.
+![Explanation01](https://raw.githubusercontent.com/roberthartmann/widgets_for_BAR/main/readme_pics/explanation01.png)
 
 ## Understanding "Time You Are Behind"
 The widget calculates how much you're lagging in utilizing your build power (BP) effectively:
