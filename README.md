@@ -27,7 +27,7 @@ After activating the new top bar, reactivate any widgets that are positioned bes
 To fully benefit from the widget, it's crucial to understand its functionalities. Refer to the pictures and descriptions in our repository to get a comprehensive understanding.
 
 Here is a picture for you to better understand how to read it.
-![Explanation01](https://raw.githubusercontent.com/roberthartmann/widgets_for_BAR/main/readme_pics/explanation01.png)
+![widget_explain](https://raw.githubusercontent.com/roberthartmann/widgets_for_BAR/main/readme_pics/widget_explain.png)
 
 ## Understanding "Time You Are Behind"
 The widget calculates how much you're lagging in utilizing your build power (BP) effectively:
