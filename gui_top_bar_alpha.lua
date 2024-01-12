@@ -960,16 +960,27 @@ local function updateResbar(res)  --decides where and what is drawn
 						local texHeight = math_floor( shareSliderWidth / 2 ) - 1
 						local indicatorPosM = BP[10]
 						local indicatorPosE = BP[11]
+						local indicatorAreaMultiplyerM = 1 
+						local indicatorAreaMultiplyerE = 1 
+						if indicatorPosM < 0.8 then
+							indicatorAreaMultiplyerM =1.5
+						end
+						if indicatorPosE < 0.8 then
+							indicatorAreaMultiplyerE =1.5
+						end
 						--put the thing at the rigt position metal
 						glColor(0.8, 0.8, 0.8, 1)
 						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-						glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth / 2)), math_floor(barArea[2] - sliderHeightAdd), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
+						glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth * indicatorAreaMultiplyerM / 2)), math_floor(barArea[2] - sliderHeightAdd * indicatorAreaMultiplyerM), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth * indicatorAreaMultiplyerM / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
 						glTexture(false)
-
+						
+						if indicatorPosE < 0.8 then
+							indicatorAreaMultiplyerE =1.5
+						end
 
 						glColor(1, 1, 0.6, 1)
 						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-						glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth / 2)), math_floor(barArea[4] + sliderHeightAdd), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1)
+						glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth * indicatorAreaMultiplyerE/ 2)), math_floor(barArea[4] + sliderHeightAdd * indicatorAreaMultiplyerE), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth * indicatorAreaMultiplyerE/ 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1) -- it's left, top (to invert the pic), right, bottom
 						glTexture(false)
 						Log("sliders end" ..i)
 					end
