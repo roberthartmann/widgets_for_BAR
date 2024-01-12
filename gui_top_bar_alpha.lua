@@ -1170,7 +1170,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 						else color = {0.0, 1.0, 0.39, 1.0} end --Green 
 						font2:SetTextColor(color[1], color[2], color[3], color[4])
 					end
-					if res == 'BP' and drawBPBar == true then -- for bp bar only
+					if res == 'BP' and drawBPBar == true and playerStallingMetal == true then -- for bp bar only
 						font2:SetOutlineColor(0, 0, 0, 1)
 						font2:Print(currentResValue[res] .."s", resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
 						font2:End()
