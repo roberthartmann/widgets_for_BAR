@@ -962,10 +962,10 @@ local function updateResbar(res)  --decides where and what is drawn
 						local indicatorPosE = BP[11]
 						local indicatorAreaMultiplyerM = 1 
 						local indicatorAreaMultiplyerE = 1 
-						if indicatorPosM < 0.8 then
+						if playerStallingMetal == true then
 							indicatorAreaMultiplyerM =1.5
 						end
-						if indicatorPosE < 0.8 then
+						if playerStallingEnergy == true then
 							indicatorAreaMultiplyerE =1.5
 						end
 						--put the thing at the rigt position metal
