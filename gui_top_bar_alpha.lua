@@ -1,6 +1,6 @@
 function widget:GetInfo()
 	return {
-		name = "Top Bar alpha", 
+		name = "Top Bar supplyable BP", 
 		desc = "Shows Resources, wind speed, commander counter, and various options.", 
 		author = "Floris and Floris and Floris and Robert82", 
 		date = "Feb, 2017", 
@@ -25,7 +25,7 @@ end
 -- for bp bar only
 local metalCostForCommander = 1250 
 local includeFactories = true 
-local proMode = true
+local proMode = false
 local drawBPBar = true
 local drawBPIndicators = true
 
