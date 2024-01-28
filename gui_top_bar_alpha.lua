@@ -756,13 +756,6 @@ local function updateResbarText(res)
 									--WG['notifications'].addEvent('YouAreOverflowingEnergy')	-- this annoys the fuck out of em and makes them build energystoages too much
 								end
 							end
-
-						--elseif res == 'BP' and drawBPBar == true then -- for bp bar only
-						--	if playerStallingMetal then
-						--		text = "   need metal   "
-						--	else
-						--		text = "   need energy   "
-						--	end
 						end
 
 						local fontSize = (orgHeight * (1 + (ui_scale - 1) / 1.33) / 4) * widgetScale
@@ -845,7 +838,7 @@ local function updateResbarText(res)
 							indicatorPosE = 0
 						end
 						if res == 'BP' and indicatorPosM < 0.4 or indicatorPosE < 0.4 then
-							text ='   to much BP   '
+							text ='   too much BP   '
 							local textWidth1 = font2:GetTextWidth(text) * fontSize
 							color5 = { 0.20, 0.20, 0.20, 1 }
 							color6 = { 0.12, 0.12, 0.12, 1 }
@@ -872,7 +865,12 @@ local function updateResbar(res)  --decides where and what is drawn
 	local barHeight = math_floor((height * widgetScale / 7) + 0.5)
 	local barHeightPadding = math_floor(((height / 4.4) * widgetScale) + 0.5) --((height/2) * widgetScale) - (barHeight/2)
 	--local barLeftPadding = 2 * widgetScale
+	local barLeftOffset = -10
 	local barLeftPadding = math_floor(47 * widgetScale) --xxx 53*
+	if res == 'BP' and drawBPBar == true then
+		barLeftPadding = math_floor(10 * widgetScale)
+		barLeftOffset = barLeftOffset + 37
+	end
 	local barRightPadding = math_floor(14.5 * widgetScale)
 	local barArea = { area[1] + math_floor((height * widgetScale) + barLeftPadding), area[2] + barHeightPadding, area[3] - barRightPadding, area[2] + barHeight + barHeightPadding }
 	local sliderHeightAdd = math_floor(barHeight / 1.55)
@@ -900,16 +898,16 @@ local function updateResbar(res)  --decides where and what is drawn
 	resbarDrawinfo[res].barGlowRightTexRect = { resbarDrawinfo[res].barTexRect[3] + (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	if res ~= 'BP' then -- for bp bar only
 		resbarDrawinfo[res].textStorage = { "\255\150\150\100" .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
-		resbarDrawinfo[res].textPull = { "\255\210\100\100" .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
-		resbarDrawinfo[res].textExpense = { "\255\210\100\100" .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
-		resbarDrawinfo[res].textIncome = { "\255\100\210\100" .. short(r[res][4]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
+		resbarDrawinfo[res].textPull = { "\255\210\100\100" .. short(r[res][3]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
+		resbarDrawinfo[res].textExpense = { "\255\210\100\100" .. short(r[res][5]), barArea[1] + ((barLeftOffset + 20) * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
+		resbarDrawinfo[res].textIncome = { "\255\100\210\100" .. short(r[res][4]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
 		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }
 	end
 	if res == 'BP' and drawBPBar == true then -- for bp bar only does the color really matter here? isn't it set in font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2]
 		resbarDrawinfo[res].textStorage = { "\100\125\125\100" .. short(r[res][4]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' } --totalBP
-		resbarDrawinfo[res].textPull = { "\100\255\0\100" .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' } --used
-		resbarDrawinfo[res].textExpense = { "\100\150\0\100" .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	--reserved
-		resbarDrawinfo[res].textIncome = { "\100\100\100\100" .. short(r[res][2]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' } --metalCost
+		resbarDrawinfo[res].textPull = { "\100\255\0\100" .. short(r[res][3]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' } --used
+		resbarDrawinfo[res].textExpense = { "\100\150\0\100" .. short(r[res][5]), barArea[1] + ((barLeftOffset + 20) * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	--reserved
+		resbarDrawinfo[res].textIncome = { "\100\100\100\100" .. short(r[res][2]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' } --metalCost
 		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }	
 	end
 
@@ -957,7 +955,14 @@ local function updateResbar(res)  --decides where and what is drawn
 		local addedSize = math_floor(((barArea[4] - barArea[2]) * 0.15) + 0.5)
 		--RectRound(barArea[1] - edgeWidth, barArea[2] - edgeWidth, barArea[3] + edgeWidth, barArea[4] + edgeWidth, barHeight * 0.33, 1, 1, 1, 1, { 1, 1, 1, 0.03 }, { 1, 1, 1, 0.03 })
 		local borderSize = 1
-		RectRound(barArea[1] - edgeWidth + borderSize, barArea[2] - edgeWidth + borderSize, barArea[3] + edgeWidth - borderSize, barArea[4] + edgeWidth - borderSize, barHeight * 0.2, 1, 1, 1, 1, { 0, 0, 0, 0.12 }, { 0, 0, 0, 0.15 })
+		local fullBarColorLow = { 0, 0, 0, 0.12 } -- bottom (lowlight)
+		local fullBarColorHigh = { 0, 0, 0, 0.15 } -- top (highlight)
+		if res == 'BP' then
+			-- red background, since unused BP is a problem
+			fullBarColorLow = { 1, 0, 0, 0.22 } -- bottom (lowlight)
+			fullBarColorHigh = { 1, 0, 0, 0.25 } -- top (highlight)
+		end
+		RectRound(barArea[1] - edgeWidth + borderSize, barArea[2] - edgeWidth + borderSize, barArea[3] + edgeWidth - borderSize, barArea[4] + edgeWidth - borderSize, barHeight * 0.2, 1, 1, 1, 1, fullBarColorLow, fullBarColorHigh)
 
 		gl.Texture(noiseBackgroundTexture)
 		gl.Color(1, 1, 1, 0.16)
@@ -993,39 +998,56 @@ local function updateResbar(res)  --decides where and what is drawn
 			end
 			UiSliderKnob(math_floor(conversionIndicatorArea[1]+((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2)), math_floor(conversionIndicatorArea[2]+((conversionIndicatorArea[4]-conversionIndicatorArea[2])/2)), math_floor((conversionIndicatorArea[3]-conversionIndicatorArea[1])/2), { 0.95, 0.95, 0.7, 1 })
 		end
-		--show usefulBPFaktor
+		--show usefulBPFactor
 		local ignore = false
 		if ignore ~= true then
 			for i = 1, 1 do
 				if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
 				
-					if res == 'BP' then
-						local texWidth = 1.3 * shareSliderWidth
+					-- If we aren't using any BP, we don't have a good estimate as to how much BP our eco can support.
+					if res == 'BP' and BP[5] > 0.01 then
+						local texWidth = 1.0 * shareSliderWidth
 						local texHeight = math_floor( shareSliderWidth / 2 ) - 1
 						local indicatorPosM = BP[10]
 						local indicatorPosE = BP[11]
-						local indicatorAreaMultiplyerM = 1 
-						local indicatorAreaMultiplyerE = 1 
+						local indicatorAreaMultiplyerM = 1
+						local indicatorAreaMultiplyerE = 1
 						if playerStallingMetal == true then
-							indicatorAreaMultiplyerM =1.5
+							indicatorAreaMultiplyerM = 1.5
 						end
 						if playerStallingEnergy == true then
-							indicatorAreaMultiplyerE =1.5
-						end
-						--put the thing at the rigt position metal
-						glColor(0.8, 0.8, 0.8, 1)
-						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-						glTexRect(math_floor(barArea[1] + (indicatorPosM * barWidth) - (texWidth * indicatorAreaMultiplyerM / 2)), math_floor(barArea[2] - sliderHeightAdd * indicatorAreaMultiplyerM), math_floor(barArea[1] + (indicatorPosM * barWidth) + (texWidth * indicatorAreaMultiplyerM / 2)), math_floor((barArea[2] + barArea[4]) / 2 ) - 1)
-						glTexture(false)
-						
-						if indicatorPosE < 0.8 then
-							indicatorAreaMultiplyerE =1.5
+							indicatorAreaMultiplyerE = 1.5
 						end
 
-						glColor(1, 1, 0.6, 1)
-						glTexture(":lr" .. texWidth .. "," .. texHeight .. ":LuaUI/Widgets/topbar/triangle.png") 
-						glTexRect(math_floor(barArea[1] + (indicatorPosE * barWidth) - (texWidth * indicatorAreaMultiplyerE/ 2)), math_floor(barArea[4] + sliderHeightAdd * indicatorAreaMultiplyerE), math_floor(barArea[1] + (indicatorPosE * barWidth) + (texWidth * indicatorAreaMultiplyerE/ 2)), math_floor((barArea[2] + barArea[4]) / 2 ) + 1) -- it's left, top (to invert the pic), right, bottom
-						glTexture(false)
+						local indicatorH = barHeight -- how tall are the metal-supported-BP and energy-supported-BP indicators?
+						local barIntrusion = barHeight / 3 -- how much of the BP bar can be obscured (vertically) by one of these indicators?
+						local indicatorW = indicatorH * 1.5
+						local cornerSize = indicatorH / 2
+						local metalIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerM / 2
+						local energyIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerE / 2
+
+						-- Indicator for buildpower that current METAL income can support. This is shown along the BOTTOM edge of the BP bar.
+						RectRound(
+							barArea[1] + (indicatorPosM * barWidth) - metalIndicatorHalfWidth, -- left
+							barArea[2] + (barIntrusion - indicatorH), -- bottom
+							barArea[1] + (indicatorPosM * barWidth) + metalIndicatorHalfWidth, -- right
+							barArea[2] + barIntrusion, -- top
+							cornerSize,
+							1, 1, 0, 0, -- round TopLeft, TopRight, but not BottomRight, BottomLeft (so it looks like it's pointing upward)
+							{ 0.6, 0.6, 0.6, 1 }, -- lowlight color (RGBA)
+							{ 1,   1,   1,   1 }) -- highlight color (RGBA)
+
+						-- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
+						RectRound(
+							barArea[1] + (indicatorPosE * barWidth) - energyIndicatorHalfWidth, -- left
+							barArea[4] - barIntrusion, -- bottom
+							barArea[1] + (indicatorPosE * barWidth) + energyIndicatorHalfWidth, -- right
+							barArea[4] - barIntrusion + indicatorH, -- top
+							cornerSize,
+							0, 0, 1, 1, -- don't round TopLeft, TopRight but round BottomRight, BottomLeft (so it looks like it's pointing downward)
+							{0.8, 0.8, 0.4, 1}, -- lowlight color (RGBA)
+							{1,   1,   0.6, 1}) -- highlight color (RGBA)
+
 						Log("sliders end" ..i)
 					end
 				end
@@ -1074,12 +1096,26 @@ local function updateResbar(res)  --decides where and what is drawn
 		end
 		if res == 'BP' and drawBPBar == true then -- for bp bar only
 			if not (res == 'BP' and proMode == false) then -- too much info for some users while early testing
-				WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] }, tostring(totallyUsedBP) .." BP is actually used")
-				WG['tooltip'].AddTooltip(res .. '_storage', { resbarDrawinfo[res].textStorage[2] - (resbarDrawinfo[res].textStorage[4] * 2.75), resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3] + resbarDrawinfo[res].textStorage[4] }, "all your building units cost " ..tostring(totalMetalCostOfBuilders ) .." metal in total")
-				WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, tostring(avgTotalReservedBP ) .." BP is reserved for current and comming projects")
+				WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] },
+					tostring(totallyUsedBP) .." BP is actually used")
+				WG['tooltip'].AddTooltip(res .. '_storage', { resbarDrawinfo[res].textStorage[2] - (resbarDrawinfo[res].textStorage[4] * 2.75), resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3] + resbarDrawinfo[res].textStorage[4] },
+					"You have a total of " ..tostring(BP[4]) .." build power.")
+				WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] },
+					tostring(avgTotalReservedBP ) .." BP is reserved for current and comming projects")
 			end
-			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, "you've got " ..tostring(totalAvailableBP) .." BP in total")
-			WG['tooltip'].AddTooltip(res .. '_Current', { resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.75), resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4] }, "your idling BP is costing you " ..tostring(currentResValue[res]) .."s of metal income. Consider less BP if this number is above 20")
+
+			-- TODO: ensure these are consistent with text/highlight colors elsewhere in BAR.
+			local textColor = '\255\215\215\215'
+			local highlightColor = '\255\255\255\255'
+			local avgTotalReservedBP = math.round(BP[3])
+			local totalAvailableBP = BP[4]
+			local avgTotalUsedBP = math.round(BP[5])
+			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] },
+				textColor .. "You have a total of " .. highlightColor .. totalAvailableBP .. textColor .. " build power (BP).\n" ..
+				"You are using " .. highlightColor .. avgTotalUsedBP .. textColor .. " BP, " ..
+				"with " .. highlightColor .. avgTotalReservedBP .. textColor .. " reserved.\n(Reserved: in-use, walking to a structure, or stalled.)", nil, "Build Power")
+			WG['tooltip'].AddTooltip(res .. '_Current', { resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.75), resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4] },
+				"your idling BP is costing you " ..tostring(currentResValue[res]) .."s of metal income. Consider less BP if this number is above 20")
 		elseif res ~= 'BP' or drawBPBar == true then
 			WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, Spring.I18N('ui.topbar.resources.pullTooltip', { resource = resourceName }))  
 			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, Spring.I18N('ui.topbar.resources.incomeTooltip', { resource = resourceName })) 
