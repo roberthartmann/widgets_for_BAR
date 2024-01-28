@@ -29,8 +29,8 @@ local proMode = true
 local drawBPBar = true
 local drawBPIndicators = true
 
--- needed for exact calculations
-local initData = {0, 0, 0.1, 0, 0, 1, 1, 1, 1}
+-- stores the date that is used for the res calc and BP bar
+local BP = {0, 0, 0.1, 0, 0, 1, 1, 1, 1, 1}
 
 local totalUsedBPData = {} -- used to calculate the avarage used BP
 local totalReservedBPData = {} -- used to calculate the avarage reserved BP
@@ -52,8 +52,6 @@ local totalStallingE = 0
 local addStalling = true
 
 local CMD_PRIORITY = 34571 --low prio builders
-
-local BP = initData -- stores the date that is used for the res calc and BP bar
 
 -- build power/ res calc entries end here
 
@@ -1005,7 +1003,7 @@ local function updateResbar(res)  --decides where and what is drawn
 				if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
 				
 					-- If we aren't using any BP, we don't have a good estimate as to how much BP our eco can support.
-					if res == 'BP' and BP[5] > 0.01 then
+					if res == 'BP' then
 						local texWidth = 1.0 * shareSliderWidth
 						local texHeight = math_floor( shareSliderWidth / 2 ) - 1
 						local indicatorPosM = BP[10]
@@ -1275,7 +1273,7 @@ end
 function init()
 	r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') } }
 	if drawBPBar == true then
-		r['BP'] = initData
+		r['BP'] = BP
 	end
 
 	topbarArea = { math_floor(xPos + (borderPadding * widgetScale)), math_floor(vsy - (height * widgetScale)), vsx, vsy }
@@ -1420,6 +1418,12 @@ function widget:GameFrame(n)
 				local cacheTotalReservedBP = 0
 				local cacheTotallyUsedBP = 0
 				local cacheMetalCostOfUsedBuildPower = 0
+
+				-- How much metal and energy are being pulled by builders, specifically? (As opposed to metal extractors, etc.)
+				local usedBPMetalPull = 0
+				local usedBPEnergyPull = 0
+				local buildingBP = 0 -- how much BP is actively building, regardless of how stalled it is?
+
 				--local nowChecking = 0 -- counter for trackedUnits per frame
 				--Log("." )
 				--Log("." )
@@ -1436,11 +1440,14 @@ function widget:GameFrame(n)
 							--totalAvailableBP = totalAvailableBP + currentUnitBP
 							local unitDefID = spGetUnitDefID(unitID)
 							local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-							local _, currrentlyUsedM, _, currrentlyUsedE = Spring.GetUnitResources(unitID)
-							if foundActivity == true or currrentlyUsedM > 0 or currrentlyUsedE > 0 then
+							local _, currentlyUsedM, _, currentlyUsedE = Spring.GetUnitResources(unitID)
+							if foundActivity == true or currentlyUsedM > 0 or currentlyUsedE > 0 then
 								cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
 								local builtUnitID = spGetUnitIsBuilding(unitID)
 								if builtUnitID then
+									usedBPMetalPull = usedBPMetalPull + currentlyUsedM
+									usedBPEnergyPull = usedBPEnergyPull + currentlyUsedE -- A builder may be cloaked, but not while it's building
+
 									addStalling = false
 									local prio = checkPriority(unitID)
 									if checkPriority(unitID) == "low" then
@@ -1448,12 +1455,13 @@ function widget:GameFrame(n)
 									end 
 									local builtUnitDefID = spGetUnitDefID(builtUnitID)
 									currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-									currentlyUsedBP = currrentlyUsedM / unitCostData[builtUnitDefID].MperBP
+									currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP
+									buildingBP = buildingBP + currentUnitBP
 									if addStalling == true then
-										local currrentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
-										local currrentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
-										cacheTotalStallingM = cacheTotalStallingM + currrentlyWantedM - currrentlyUsedM
-										cacheTotalStallingE = cacheTotalStallingE + currrentlyWantedE - currrentlyUsedE
+										local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
+										local currentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
+										cacheTotalStallingM = cacheTotalStallingM + currentlyWantedM - currentlyUsedM
+										cacheTotalStallingE = cacheTotalStallingE + currentlyWantedE - currentlyUsedE
 									end
 									if drawBPBar == true then
 										if currentlyUsedBP and currentlyUsedBP > 0 then 				
@@ -1473,6 +1481,12 @@ function widget:GameFrame(n)
 				cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
 				cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
 				cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
+
+				-- How much metal and energy are builders pulling? (This number will drop when they become resource-stalled, perhaps due to being low-priority.)
+				BP['usedBPMetalPull'] = usedBPMetalPull
+				BP['usedBPEnergyPull'] = usedBPEnergyPull
+				BP['usedBPIfNoStall'] = buildingBP
+
 				trackPosBase = trackPosBase + unitsPerFrame
 				--Log("trackPosBase-----------------" ..trackPosBase)
 			end
@@ -1487,8 +1501,6 @@ function widget:GameFrame(n)
 				local avgTotalReservedBP = BP[3]
 				local totalAvailableBP = BP[4]
 				local avgTotalUsedBP = BP[5]
-				local usefulBPFactorM = BP[8]
-				local usefulBPFactorE = BP[9]
 				
 				if BP[2] == nil then
 					totalMetalCostOfBuilders = 1
@@ -1505,14 +1517,8 @@ function widget:GameFrame(n)
 					avgTotalUsedBP = 1
 				end
 
-				if BP[8] == nil then
-					usefulBPFactorM = 1
-				end
-				if BP[9] == nil then
-					usefulBPFactorE = 1
-				end
-				local indicatorPosM = usefulBPFactorM * avgTotalReservedBP / totalAvailableBP
-				local indicatorPosE = usefulBPFactorE * avgTotalReservedBP / totalAvailableBP
+				local indicatorPosM = BP[8]
+				local indicatorPosE = BP[9]
 				if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
 					indicatorPosM = 1
 				end
@@ -1590,10 +1596,10 @@ local function updateAllyTeamOverflowing()
 	local metalPercentile, energyPercentile 
 	local teams = Spring.GetTeamList(myAllyTeamID)
 	for i, teamID in pairs(teams) do
-		local metal, metalStorage, metalPull, metalIncome, _, metalShare, metalSent = spGetTeamResources(teamID, "metal")
+		local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(teamID, "metal")
 		totalMetal = totalMetal + metal
 		totalMetalStorage = totalMetalStorage + metalStorage
-		local energy, energyStorage, energyPull, energyIncome, _, energyShare, energySent = spGetTeamResources(teamID, "energy")
+		local energy, energyStorage, energyPull, energyIncome, energyExpense, energyShare, energySent = spGetTeamResources(teamID, "energy")
 		totalEnergy = totalEnergy + energy
 		totalEnergyStorage = totalEnergyStorage + energyStorage
 		if teamID == myTeamID then
@@ -1637,10 +1643,46 @@ local function updateAllyTeamOverflowing()
 				end 
 			end -- until here
 			if res ~= 'BP' or drawBPBar == true then
-				local usefulBPFactorM = metalIncome / realMetalPull
-				local usefulBPFactorE = energyIncome / realEnergyPull
+
+				-- If nobody is building, just assume our eco can fully-support all builders.
+				local usefulBPFactorM = 1
+				local usefulBPFactorE = 1
+
+				local totalBP = BP[4]
+				local usedBP = BP[5]
+				--local usedBPIfNoStall = BP['usedBPIfNoStall']
+
+				-- What if all builders were active and pulled metal and energy in the same proportions as current builders?
+				-- (Note that we can't figure this out if nobody is building.)
+				if usedBP >= 1 then
+					-- How much metal and energy are we spending _not_ due to builders?
+					local metalExpenseMinusBuilders = metalExpense - BP['usedBPMetalPull']
+					local energyExpenseMinusBuilders = energyExpense - BP['usedBPEnergyPull']
+					BP['nonBPMetalPull'] = metalPullMinusBuilders
+					BP['nonBPEnergyPull'] = energyPullMinusBuilders
+					BP['metalPull'] = metalPull
+					BP['realMetalPull'] = realMetalPull
+					BP['metalExpense'] = metalExpense
+					BP['energyPull'] = energyPull
+					BP['realEnergyPull'] = realEnergyPull
+					BP['energyExpense'] = energyExpense
+
+					local metalExpenseIfAllBuilders = metalExpenseMinusBuilders + BP['usedBPMetalPull'] * totalBP / usedBP
+					local energyExpenseIfAllBuilders = energyExpenseMinusBuilders + BP['usedBPEnergyPull'] * totalBP / usedBP
+					BP['mPullAllBP'] = metalExpenseIfAllBuilders
+					BP['ePullAllBP'] = energyExpenseIfAllBuilders
+
+					if metalExpenseIfAllBuilders >= 1 then
+						usefulBPFactorM = metalIncome / metalExpenseIfAllBuilders
+					end
+
+					if energyExpenseIfAllBuilders >= 1 then
+						usefulBPFactorE = energyIncome / energyExpenseIfAllBuilders
+					end
+				end
+
 				BP[8] = usefulBPFactorM
-                BP[9] = usefulBPFactorE
+				BP[9] = usefulBPFactorE
 				if usefulBPFactorM < 0.8 and metal < 2 * metalPull then
 					playerStallingMetal = 1
 				end
@@ -1717,9 +1759,6 @@ function widget:Update(dt)
 	sec = sec + dt
 	if sec > 0.1 then
 		Log("sec > 0.1")
-		if BP[1] == nil or BP[2] == 0 then -- for bp bar only (change player while specing/ player death)
-			BP = initData
-		end 
 		sec = 0
 		r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') }, BP = BP }
 		if not spec and not showQuitscreen then
