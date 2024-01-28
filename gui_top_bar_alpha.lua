@@ -1,6 +1,6 @@
 function widget:GetInfo()
 	return {
-		name = "Top Bar supplyable BP", 
+		name = "Top Bar alpha 1", 
 		desc = "Shows Resources, wind speed, commander counter, and various options.", 
 		author = "Floris and Floris and Floris and Robert82", 
 		date = "Feb, 2017", 
@@ -16,16 +16,16 @@ function Log(Message)
 		Spring.Echo(Message)
 	end
 end
-local Debugmode1 = false
+local Debugmode1 = true
 function Log1(Message)
-	if Debugmode1==true then
+	if Debugmode1 == true then
 		Spring.Echo(Message)
 	end
 end
 -- for bp bar only
 local metalCostForCommander = 1250 
 local includeFactories = true 
-local proMode = false
+local proMode = true
 local drawBPBar = true
 local drawBPIndicators = true
 
@@ -661,8 +661,12 @@ local function updateResbarText(res)
 			elseif res == 'BP' and drawBPBar == true then
 				font2:SetTextColor(0.45, 0.6, 0.45, 1)
 			end
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then
+			-- -- Text: Storage
+			if res ~= 'BP' then
 				font2:Print(short(r[res][2]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5])
+			end
+			if res == 'BP' and proMode == true and drawBPBar == true then
+				font2:Print("\255\100\100\100" .. short(r[res][4]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5]) 
 			end
 			font2:End()
 		end)
@@ -691,27 +695,34 @@ local function updateResbarText(res)
 		dlistResbar[res][3] = glCreateList(function() 
 			font2:Begin()
 			-- Text: pull
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
-				font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
+			if res ~= 'BP' then
+			font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
+			elseif res == 'BP' then
+				font2:Print("\255\0\255\0"  .. short(r[res][5]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
 			end
 			-- Text: expense
 			local textcolor = "\255\240\180\145"
 			if r[res][3] == r[res][5] then
 				textcolor = "\255\200\140\130"
 			end
-			if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
+			if res ~= 'BP' then
 				font2:Print(textcolor .. "-" .. short(r[res][5]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
+			elseif res == 'BP' then
+				font2:Print("\255\50\155\0" .. short(r[res][3]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
 			end
-			-- income
-			font2:Print("\255\120\235\120" .. "+" .. short(r[res][4]), resbarDrawinfo[res].textIncome[2], resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[4], resbarDrawinfo[res].textIncome[5])
+			-- Text: income
+			if res ~= 'BP' then
+				font2:Print("\255\120\235\120" .. "+" .. short(r[res][4]), resbarDrawinfo[res].textIncome[2], resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[4], resbarDrawinfo[res].textIncome[5])
+			elseif res == 'BP' then
+				--font2:Print("\001\100\100\100" .. short(r[res][2]), resbarDrawinfo[res].textIncome[2], resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[4], resbarDrawinfo[res].textIncome[5]) --don't show metal cost
+			end	
 			font2:End()
 
-			if not spec and gameFrame > 90 then
-
+			if gameFrame > 1 then --xxx not spec and 
 				-- display overflow notification
 				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy) and drawBPBar == true)then
 					if showOverflowTooltip[res] == nil then
-						showOverflowTooltip[res] = os.clock() + 1.1
+						showOverflowTooltip[res] = os.clock() + 0.1
 					end
 					if showOverflowTooltip[res] < os.clock() then
 						local bgpadding2 = 2.2 * widgetScale
@@ -746,18 +757,18 @@ local function updateResbarText(res)
 								end
 							end
 
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
-							if playerStallingMetal then
-								text = "   metal   "
-							else 
-								text = "   energy   "
-							end
+						--elseif res == 'BP' and drawBPBar == true then -- for bp bar only
+						--	if playerStallingMetal then
+						--		text = "   need metal   "
+						--	else
+						--		text = "   need energy   "
+						--	end
 						end
 
 						local fontSize = (orgHeight * (1 + (ui_scale - 1) / 1.33) / 4) * widgetScale
 						local textWidth = font2:GetTextWidth(text) * fontSize
 						-- background
-						local color1, color2
+						local color1, color2, color3, color4, color5, color6
 						if res == 'metal' then
 							if allyteamOverflowingMetal then
 								color1 = { 0.35, 0.1, 0.1, 1 }
@@ -766,6 +777,7 @@ local function updateResbarText(res)
 								color1 = { 0.35, 0.35, 0.35, 1 }
 								color2 = { 0.25, 0.25, 0.25, 1 }
 							end
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] , resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
 						elseif res == 'energy' then
 							if allyteamOverflowingEnergy then
 								color1 = { 0.35, 0.1, 0.1, 1 }
@@ -774,16 +786,8 @@ local function updateResbarText(res)
 								color1 = { 0.35, 0.25, 0, 1 }
 								color2 = { 0.25, 0.16, 0, 1 }
 							end
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
-							if playerStallingMetal then 
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
-							else
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
-							end
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] , resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
 						end
-						RectRound(resbarArea[res][3] - textWidth, resbarArea[res][4] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][4], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
 						if res == 'metal' then
 							if allyteamOverflowingMetal then
 								color1 = { 1, 0.3, 0.3, 0.25 }
@@ -792,6 +796,7 @@ local function updateResbarText(res)
 								color1 = { 1, 1, 1, 0.25 }
 								color2 = { 1, 1, 1, 0.44 }
 							end
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
 						elseif res == 'energy' then
 							if allyteamOverflowingEnergy then
 								color1 = { 1, 0.3, 0.3, 0.25 }
@@ -800,21 +805,53 @@ local function updateResbarText(res)
 								color1 = { 1, 0.88, 0, 0.25 }
 								color2 = { 1, 0.88, 0, 0.44 }
 							end
-						elseif res == 'BP' and drawBPBar == true then -- for bp bar only
-							if playerStallingMetal then
-								color1 = { 1, 0.3, 0.3, 0.25 }
-								color2 = { 1, 0.3, 0.3, 0.44 }
-							else
-								color1 = { 1, 0.88, 0, 0.25 }
-								color2 = { 1, 0.88, 0, 0.44 }
-							end
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
 						end
-						RectRound(resbarArea[res][3] - textWidth + bgpadding2, resbarArea[res][4] - 15.5 * widgetScale + bgpadding2, resbarArea[res][3] - bgpadding2, resbarArea[res][4], 2.8 * widgetScale, 0, 0, 1, 1, color1, color2)
-
 						font2:Begin()
 						font2:SetTextColor(1, 0.88, 0.88, 1)
 						font2:SetOutlineColor(0.2, 0, 0, 0.6)
-						font2:Print(text, resbarArea[res][3], resbarArea[res][4] - 9.3 * widgetScale, fontSize, 'or')
+						if res ~= 'BP' then
+						font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
+						end
+
+						if res == 'BP' and playerStallingMetal then
+							text ='   need Metal   '
+							local textWidth = font2:GetTextWidth(text) * fontSize
+							color1 = { 0.35, 0.1, 0.1, 1 }
+							color2 = { 0.25, 0.05, 0.05, 1 }
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+							color1 = { 0.35, 0.1, 0.1, 1 }
+							color2 = { 0.25, 0.05, 0.05, 1 }
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+							font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+						end
+						
+						if res == 'BP' and playerStallingEnergy then
+							text ='   need Energy   '
+							local textWidth = font2:GetTextWidth(text) * fontSize
+							color3 = { 0.35, 0.1, 0.1, 1 }
+							color4 = { 0.25, 0.05, 0.05, 1 }
+							RectRound(resbarArea[res][3] - 2 * textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2] , 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
+							color3 = { 0.35, 0.1, 0.1, 1 }
+							color4 = { 0.25, 0.05, 0.05, 1 }
+							RectRound(resbarArea[res][3] - 2 * textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
+							font2:Print(text, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+						end
+						
+						local indicatorPosM = BP[10]
+						local indicatorPosE = BP[11]
+						if indicatorPosM == nil or indicatorPosE == nil then
+							indicatorPosM = 0
+							indicatorPosE = 0
+						end
+						if res == 'BP' and indicatorPosM < 0.4 or indicatorPosE < 0.4 then
+							text ='   to much BP   '
+							local textWidth1 = font2:GetTextWidth(text) * fontSize
+							color5 = { 0.20, 0.20, 0.20, 1 }
+							color6 = { 0.12, 0.12, 0.12, 1 }
+							RectRound(resbarArea[res][3] - 3.5 * textWidth1, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 2.5 * textWidth1, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
+							font2:Print(text, resbarArea[res][3] - 2.5 * textWidth1, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+						end
 						font2:End()
 					end
 				else
@@ -861,14 +898,21 @@ local function updateResbar(res)  --decides where and what is drawn
 	resbarDrawinfo[res].barGlowMiddleTexRect = { resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowLeftTexRect = { resbarDrawinfo[res].barTexRect[1] - (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowRightTexRect = { resbarDrawinfo[res].barTexRect[3] + (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
-	if not (res == 'BP' and proMode == false) or drawBPBar == true then -- for bp bar only
-		resbarDrawinfo[res].textStorage = { "\255\150\150\150" .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
+	if res ~= 'BP' then -- for bp bar only
+		resbarDrawinfo[res].textStorage = { "\255\150\150\100" .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
 		resbarDrawinfo[res].textPull = { "\255\210\100\100" .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
 		resbarDrawinfo[res].textExpense = { "\255\210\100\100" .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
+		resbarDrawinfo[res].textIncome = { "\255\100\210\100" .. short(r[res][4]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
+		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }
 	end
-	resbarDrawinfo[res].textIncome = { "\255\100\210\100" .. short(r[res][4]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
-	resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }
-	
+	if res == 'BP' and drawBPBar == true then -- for bp bar only does the color really matter here? isn't it set in font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2]
+		resbarDrawinfo[res].textStorage = { "\100\125\125\100" .. short(r[res][4]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' } --totalBP
+		resbarDrawinfo[res].textPull = { "\100\255\0\100" .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' } --used
+		resbarDrawinfo[res].textExpense = { "\100\150\0\100" .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	--reserved
+		resbarDrawinfo[res].textIncome = { "\100\100\100\100" .. short(r[res][2]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' } --metalCost
+		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }	
+	end
+
 	-- add background blur
 	if dlistResbar[res][0] ~= nil then
 		if WG['guishader'] then
@@ -1170,9 +1214,10 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 						else color = {0.0, 1.0, 0.39, 1.0} end --Green 
 						font2:SetTextColor(color[1], color[2], color[3], color[4])
 					end
-					if res == 'BP' and drawBPBar == true and playerStallingMetal == true then -- for bp bar only
+					-- Text: current
+					if res == 'BP' and drawBPBar == true then -- for bp bar only
 						font2:SetOutlineColor(0, 0, 0, 1)
-						font2:Print(currentResValue[res] .."s", resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
+						--font2:Print(currentResValue[res] .."s", resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
 						font2:End()
 					else
 						font2:SetOutlineColor(0, 0, 0, 1)
@@ -1452,7 +1497,7 @@ function widget:GameFrame(n)
 			trackPosBase = 0
 			if drawBPBar == true then --this section will smooth the values so that factories that finish units won't have too much of an impact
 				table.insert(totalReservedBPData, totalReservedBP)
-				if #totalReservedBPData > 5 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
+				if #totalReservedBPData > 30 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
 					table.remove(totalReservedBPData, 1)
 				end
 
@@ -1465,7 +1510,7 @@ function widget:GameFrame(n)
 				avgTotalReservedBP = math.floor(avgTotalReservedBP / #totalReservedBPData)
 
 				table.insert(totalUsedBPData, totallyUsedBP)
-				if #totalUsedBPData > 5 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
+				if #totalUsedBPData > 30 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
 					table.remove(totalUsedBPData, 1)
 				end
 
@@ -1564,7 +1609,7 @@ local function updateAllyTeamOverflowing()
 					playerStallingMetal = 1
 				end
 
-				if usefulBPFactorE < 0.8 and energy < 2 * energyPull and not playerStallingMetal then
+				if usefulBPFactorE < 0.8 and energy < 2 * energyPull then
 					playerStallingEnergy = 1
 				end
 			end
