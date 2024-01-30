@@ -1,8 +1,8 @@
 function widget:GetInfo()
 	return {
-		name = "Top Bar alpha 1", 
-		desc = "Shows Resources, wind speed, commander counter, and various options.", 
-		author = "Floris and Floris and Floris and Robert82", 
+		name = "Top Bar with Buildpower",
+		desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
+		author = "Floris and Floris and Floris and Robert82 and gmcnew",
 		date = "Feb, 2017", 
 		license = "GNU GPL, v2 or later", 
 		layer = -999999, 
@@ -25,7 +25,7 @@ end
 -- for bp bar only
 local metalCostForCommander = 1250 
 local includeFactories = true 
-local proMode = true
+local proMode = false
 local drawBPBar = true
 local drawBPIndicators = true
 
@@ -34,6 +34,11 @@ local BP = {0, 0, 0.1, 0, 0, 1, 1, 1, 1, 1}
 
 local totalUsedBPData = {} -- used to calculate the avarage used BP
 local totalReservedBPData = {} -- used to calculate the avarage reserved BP
+BP['reservedBPIntegral'] = 0
+BP['reservedBPError'] = 0
+BP['usedBPIntegral'] = 0
+BP['usedBPError'] = 0
+BP['pidBPGameTime'] = 0
 
 local unitsPerFrame = 100 --limit processed units per frame to improve performance
 local trackedNum = 0
@@ -350,6 +355,13 @@ local function short(n, f)
 	end
 end
 
+local function float_to_s(n)
+	if n == nil then
+		return "nil"
+	end
+	return sformat("%.3f", n)
+end
+
 local function updateButtons()
 
 	local fontsize = (height * widgetScale) / 3
@@ -663,8 +675,9 @@ local function updateResbarText(res)
 			if res ~= 'BP' then
 				font2:Print(short(r[res][2]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5])
 			end
-			if res == 'BP' and proMode == true and drawBPBar == true then
-				font2:Print("\255\100\100\100" .. short(r[res][4]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5]) 
+			if res == 'BP' and proMode and drawBPBar == true then
+				-- total buildpower
+				font2:Print("\255\100\100\100" .. short(r[res][4]), resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[4], resbarDrawinfo[res].textStorage[5])
 			end
 			font2:End()
 		end)
@@ -695,7 +708,8 @@ local function updateResbarText(res)
 			-- Text: pull
 			if res ~= 'BP' then
 			font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
-			elseif res == 'BP' then
+			elseif res == 'BP' and proMode then
+				-- used buildpower
 				font2:Print("\255\0\255\0"  .. short(r[res][5]), resbarDrawinfo[res].textPull[2], resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[4], resbarDrawinfo[res].textPull[5])
 			end
 			-- Text: expense
@@ -705,7 +719,8 @@ local function updateResbarText(res)
 			end
 			if res ~= 'BP' then
 				font2:Print(textcolor .. "-" .. short(r[res][5]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
-			elseif res == 'BP' then
+			elseif res == 'BP' and proMode then
+				-- reserved buildpower (including used)
 				font2:Print("\255\50\155\0" .. short(r[res][3]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
 			end
 			-- Text: income
@@ -718,7 +733,7 @@ local function updateResbarText(res)
 
 			if gameFrame > 1 then --xxx not spec and 
 				-- display overflow notification
-				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy) and drawBPBar == true)then
+				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal)) or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy)) or (res == 'BP' and (playerStallingMetal or playerStallingEnergy or hasBpDeficit) and drawBPBar)then
 					if showOverflowTooltip[res] == nil then
 						showOverflowTooltip[res] = os.clock() + 0.1
 					end
@@ -802,48 +817,63 @@ local function updateResbarText(res)
 						font2:SetTextColor(1, 0.88, 0.88, 1)
 						font2:SetOutlineColor(0.2, 0, 0, 0.6)
 						if res ~= 'BP' then
-						font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
-						end
+							font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
+						else
+							local metalText = '   need Metal   '
+							local metalTextWidth = font2:GetTextWidth(metalText) * fontSize
+							local energyText ='   need Energy   '
+							local energyTextWidth = font2:GetTextWidth(energyText) * fontSize
+							local excessBpText ='   too much buildpower   '
+							local excessBpTextWidth = font2:GetTextWidth(excessBpText) * fontSize
+							local bpDeficitText ='   Need buildpower   '
+							local bpDeficitTextWidth = font2:GetTextWidth(bpDeficitText) * fontSize
+							local offset = 0
 
-						if res == 'BP' and playerStallingMetal then
-							text ='   need Metal   '
-							local textWidth = font2:GetTextWidth(text) * fontSize
-							color1 = { 0.35, 0.1, 0.1, 1 }
-							color2 = { 0.25, 0.05, 0.05, 1 }
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-							color1 = { 0.35, 0.1, 0.1, 1 }
-							color2 = { 0.25, 0.05, 0.05, 1 }
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-							font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+							-- These two messages aren't very useful -- just look at the metal and energy bars.
+							if res == 'BP' and proMode then
+								if playerStallingMetal then
+									color1 = { 0.35, 0.1, 0.1, 1 }
+									color2 = { 0.25, 0.05, 0.05, 1 }
+									RectRound(resbarArea[res][3] - (offset + metalTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+									color1 = { 0.35, 0.1, 0.1, 1 }
+									color2 = { 0.25, 0.05, 0.05, 1 }
+									RectRound(resbarArea[res][3] - (offset + metalTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+									font2:Print(metalText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+									offset = offset + energyTextWidth
+								end
+
+								if playerStallingEnergy then
+									color3 = { 0.35, 0.1, 0.1, 1 }
+									color4 = { 0.25, 0.05, 0.05, 1 }
+									RectRound(resbarArea[res][3] - (offset + energyTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2] , 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
+									color3 = { 0.35, 0.1, 0.1, 1 }
+									color4 = { 0.25, 0.05, 0.05, 1 }
+									RectRound(resbarArea[res][3] - (offset + energyTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
+									font2:Print(energyText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+									offset = offset + energyTextWidth
+								end
+							end
+
+							local indicatorPosM = BP[10]
+							local indicatorPosE = BP[11]
+							if (indicatorPosM ~= nil and indicatorPosM < 0.4) or (indicatorPosE ~= nil and indicatorPosE < 0.4) then
+								color5 = { 0.20, 0.20, 0.20, 1 }
+								color6 = { 0.12, 0.12, 0.12, 1 }
+								RectRound(resbarArea[res][3] - (offset + excessBpTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
+								font2:Print(excessBpText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+								offset = offset + excessBpTextWidth
+							end
+
+							--hasBpDeficit = (BP['buildpowerSurplus'] ~= nil and BP['buildpowerSurplus'] > 0)
+							if BP['buildpowerSurplus'] ~= nil then
+								color5 = { 0.20, 0.20, 0.20, 1 }
+								color6 = { 0.12, 0.12, 0.12, 1 }
+								RectRound(resbarArea[res][3] - (offset + bpDeficitTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
+								font2:Print(bpDeficitText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
+							end
+							offset = offset + bpDeficitTextWidth
+							font2:End()
 						end
-						
-						if res == 'BP' and playerStallingEnergy then
-							text ='   need Energy   '
-							local textWidth = font2:GetTextWidth(text) * fontSize
-							color3 = { 0.35, 0.1, 0.1, 1 }
-							color4 = { 0.25, 0.05, 0.05, 1 }
-							RectRound(resbarArea[res][3] - 2 * textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2] , 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
-							color3 = { 0.35, 0.1, 0.1, 1 }
-							color4 = { 0.25, 0.05, 0.05, 1 }
-							RectRound(resbarArea[res][3] - 2 * textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
-							font2:Print(text, resbarArea[res][3] - 1 * textWidth, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-						end
-						
-						local indicatorPosM = BP[10]
-						local indicatorPosE = BP[11]
-						if indicatorPosM == nil or indicatorPosE == nil then
-							indicatorPosM = 0
-							indicatorPosE = 0
-						end
-						if res == 'BP' and indicatorPosM < 0.4 or indicatorPosE < 0.4 then
-							text ='   too much BP   '
-							local textWidth1 = font2:GetTextWidth(text) * fontSize
-							color5 = { 0.20, 0.20, 0.20, 1 }
-							color6 = { 0.12, 0.12, 0.12, 1 }
-							RectRound(resbarArea[res][3] - 3.5 * textWidth1, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - 2.5 * textWidth1, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
-							font2:Print(text, resbarArea[res][3] - 2.5 * textWidth1, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-						end
-						font2:End()
 					end
 				else
 					showOverflowTooltip[res] = nil
@@ -863,13 +893,9 @@ local function updateResbar(res)  --decides where and what is drawn
 	local barHeight = math_floor((height * widgetScale / 7) + 0.5)
 	local barHeightPadding = math_floor(((height / 4.4) * widgetScale) + 0.5) --((height/2) * widgetScale) - (barHeight/2)
 	--local barLeftPadding = 2 * widgetScale
-	local barLeftOffset = -10
 	local barLeftPadding = math_floor(47 * widgetScale) --xxx 53*
-	if res == 'BP' and drawBPBar == true then
-		barLeftPadding = math_floor(10 * widgetScale)
-		barLeftOffset = barLeftOffset + 37
-	end
 	local barRightPadding = math_floor(14.5 * widgetScale)
+	local barHorizontalPadding_BP = barRightPadding
 	local barArea = { area[1] + math_floor((height * widgetScale) + barLeftPadding), area[2] + barHeightPadding, area[3] - barRightPadding, area[2] + barHeight + barHeightPadding }
 	local sliderHeightAdd = math_floor(barHeight / 1.55)
 	local shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
@@ -894,19 +920,31 @@ local function updateResbar(res)  --decides where and what is drawn
 	resbarDrawinfo[res].barGlowMiddleTexRect = { resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowLeftTexRect = { resbarDrawinfo[res].barTexRect[1] - (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowRightTexRect = { resbarDrawinfo[res].barTexRect[3] + (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
-	if res ~= 'BP' then -- for bp bar only
-		resbarDrawinfo[res].textStorage = { "\255\150\150\100" .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
-		resbarDrawinfo[res].textPull = { "\255\210\100\100" .. short(r[res][3]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
-		resbarDrawinfo[res].textExpense = { "\255\210\100\100" .. short(r[res][5]), barArea[1] + ((barLeftOffset + 20) * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
-		resbarDrawinfo[res].textIncome = { "\255\100\210\100" .. short(r[res][4]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
-		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }
+
+	local storageColor = "\255\150\150\100"
+	local pullColor = "\255\210\100\100"
+	local expenseColor = "\255\210\100\100"
+	local incomeColor = "\255\100\210\100"
+
+	if res == 'BP' and drawBPBar == true then
+		resbarDrawinfo[res].barArea = { area[1] + barHorizontalPadding_BP, barArea[2], area[3] - barHorizontalPadding_BP, barArea[4] }
+		storageColor = "\100\125\125\100"
+		pullColor = "\100\255\0\100"
+		expenseColor = "\100\150\0\100"
+		incomeColor = "\100\100\100\100"
 	end
-	if res == 'BP' and drawBPBar == true then -- for bp bar only does the color really matter here? isn't it set in font2:Print("\255\240\125\125" .. "-" .. short(r[res][3]), resbarDrawinfo[res].textPull[2]
-		resbarDrawinfo[res].textStorage = { "\100\125\125\100" .. short(r[res][4]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' } --totalBP
-		resbarDrawinfo[res].textPull = { "\100\255\0\100" .. short(r[res][3]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' } --used
-		resbarDrawinfo[res].textExpense = { "\100\150\0\100" .. short(r[res][5]), barArea[1] + ((barLeftOffset + 20) * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	--reserved
-		resbarDrawinfo[res].textIncome = { "\100\100\100\100" .. short(r[res][2]), barArea[1] + (barLeftOffset * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' } --metalCost
-		resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }	
+
+	resbarDrawinfo[res].textStorage = { storageColor .. short(r[res][2]), barArea[3], barArea[2] + barHeight * 2.1, (height / 3.2) * widgetScale, 'ord' }
+	resbarDrawinfo[res].textPull = { pullColor .. short(r[res][3]), barArea[1] - (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'ord' }
+	resbarDrawinfo[res].textExpense = { expenseColor .. short(r[res][5]), barArea[1] + (10 * widgetScale), barArea[2] + barHeight * 2.15, (height / 3) * widgetScale, 'old' }	
+	resbarDrawinfo[res].textIncome = { incomeColor .. short(r[res][4]), barArea[1] - (10 * widgetScale), barArea[2] - (barHeight * 0.55), (height / 3) * widgetScale, 'ord' }
+	resbarDrawinfo[res].textCurrent = { short(r[res][1]), barArea[1] + barWidth / 2, barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ocd' }
+	if res == 'BP' then
+		barArea = resbarDrawinfo[res].barArea
+		barWidth = barArea[3] - barArea[1]
+		if not proMode then
+			resbarDrawinfo[res].textCurrent = { short(r[res][2]), barArea[3], barArea[2] + barHeight * 1.8, (height / 2.5) * widgetScale, 'ord' } -- right-aligned
+		end
 	end
 
 	-- add background blur
@@ -934,7 +972,11 @@ local function updateResbar(res)  --decides where and what is drawn
 		-- Icon
 		glColor(1, 1, 1, 1)
 		local iconPadding = math_floor((area[4] - area[2]) / 9) --xxx /7
+		local barHorizontalPadding_BP = math_floor(14.5 * widgetScale)
 		local iconSize = math_floor(area[4] - area[2] - iconPadding - iconPadding)
+		if res == 'BP' then
+			iconSize = height / 3
+		end
 		local bgpaddingHalf = math_floor((bgpadding * 0.5) + 0.5)
 		local texSize = math_floor(iconSize * 2)
 		if res == 'metal' then
@@ -943,15 +985,22 @@ local function updateResbar(res)  --decides where and what is drawn
 
 			glTexture(":lr" ..texSize ..", " ..texSize ..":LuaUI/Images/energy.png") 
 		elseif drawBPBar == true then
-			glColor(0.8, 1, 0.8, 1)
-			glTexture(":lr" ..texSize ..", " ..texSize ..":LuaUI/Widgets/topbar/BP.png") --for bp bar only
+			glColor(1, 0.9, 0.2, 1)
+			glTexture(":lr" ..texSize ..", " ..texSize ..":LuaUI/images/stripes.png") --for bp bar only
 		end
-		glTexRect(area[1] + bgpaddingHalf + iconPadding, area[2] + bgpaddingHalf + iconPadding, area[1] + bgpaddingHalf + iconPadding + iconSize, area[4] + bgpaddingHalf - iconPadding)
+
+		if res == 'BP' then
+			TexturedRectRound(area[1] + barHorizontalPadding_BP, area[4] - bgpaddingHalf - iconPadding - iconSize, area[1] + barHorizontalPadding_BP + iconSize, area[4] - bgpaddingHalf - iconPadding,
+				iconSize * 0.2, -- corner radius
+				1, 1, 1, 1, -- corners
+				iconSize * 1, 0)
+		else
+			glTexRect(area[1] + bgpaddingHalf + iconPadding, area[2] + bgpaddingHalf + iconPadding, area[1] + bgpaddingHalf + iconPadding + iconSize, area[4] + bgpaddingHalf - iconPadding)
+		end
 		glTexture(false)
 
 		-- Bar background
 		local addedSize = math_floor(((barArea[4] - barArea[2]) * 0.15) + 0.5)
-		--RectRound(barArea[1] - edgeWidth, barArea[2] - edgeWidth, barArea[3] + edgeWidth, barArea[4] + edgeWidth, barHeight * 0.33, 1, 1, 1, 1, { 1, 1, 1, 0.03 }, { 1, 1, 1, 0.03 })
 		local borderSize = 1
 		local fullBarColorLow = { 0, 0, 0, 0.12 } -- bottom (lowlight)
 		local fullBarColorHigh = { 0, 0, 0, 0.15 } -- top (highlight)
@@ -1000,54 +1049,54 @@ local function updateResbar(res)  --decides where and what is drawn
 		local ignore = false
 		if ignore ~= true then
 			for i = 1, 1 do
-				if drawBPIndicators == true and BP[10] ~= nil and BP[11] ~= nil then 
-				
-					-- If we aren't using any BP, we don't have a good estimate as to how much BP our eco can support.
-					if res == 'BP' then
-						local texWidth = 1.0 * shareSliderWidth
-						local texHeight = math_floor( shareSliderWidth / 2 ) - 1
-						local indicatorPosM = BP[10]
-						local indicatorPosE = BP[11]
-						local indicatorAreaMultiplyerM = 1
-						local indicatorAreaMultiplyerE = 1
-						if playerStallingMetal == true then
-							indicatorAreaMultiplyerM = 1.5
-						end
-						if playerStallingEnergy == true then
-							indicatorAreaMultiplyerE = 1.5
-						end
+				if res == 'BP' and drawBPIndicators then
+					local texWidth = 1.0 * shareSliderWidth
+					local texHeight = math_floor( shareSliderWidth / 2 ) - 1
+					local indicatorPosM = BP[10]
+					local indicatorPosE = BP[11]
+					local indicatorAreaMultiplyerM = 1
+					local indicatorAreaMultiplyerE = 1
+					if playerStallingMetal == true then
+						indicatorAreaMultiplyerM = 1.5
+					end
+					if playerStallingEnergy == true then
+						indicatorAreaMultiplyerE = 1.5
+					end
 
-						local indicatorH = barHeight -- how tall are the metal-supported-BP and energy-supported-BP indicators?
-						local barIntrusion = barHeight / 3 -- how much of the BP bar can be obscured (vertically) by one of these indicators?
-						local indicatorW = indicatorH * 1.5
-						local cornerSize = indicatorH / 2
-						local metalIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerM / 2
-						local energyIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerE / 2
+					local indicatorH = barHeight * 1 -- how tall are the metal-supported-BP and energy-supported-BP indicators?
+					local barIntrusion = barHeight / 3 -- how much of the BP bar can be obscured (vertically) by one of these indicators?
+					local indicatorW = indicatorH * 1.2 -- 1.0 would bring the indicator to a perfect point, sort of like a home plate in baseball, but 1.2 gives a little extra softness and visual weight
+					local cornerSize = indicatorH / 2
+					local metalIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerM / 2
+					local energyIndicatorHalfWidth = indicatorW * indicatorAreaMultiplyerE / 2
 
-						-- Indicator for buildpower that current METAL income can support. This is shown along the BOTTOM edge of the BP bar.
+					-- Indicator for buildpower that current METAL income can support. This is shown along the BOTTOM edge of the BP bar.
+					if indicatorPosM ~= nil then
 						RectRound(
 							barArea[1] + (indicatorPosM * barWidth) - metalIndicatorHalfWidth, -- left
-							barArea[2] + (barIntrusion - indicatorH), -- bottom
+							barArea[2] + (barIntrusion - indicatorH), -- bottom of the bar, plus an intrusion upward, minus the indicator's height
 							barArea[1] + (indicatorPosM * barWidth) + metalIndicatorHalfWidth, -- right
-							barArea[2] + barIntrusion, -- top
+							barArea[2] + barIntrusion, -- bottom of the bar, plus an intrusion upward
 							cornerSize,
 							1, 1, 0, 0, -- round TopLeft, TopRight, but not BottomRight, BottomLeft (so it looks like it's pointing upward)
 							{ 0.6, 0.6, 0.6, 1 }, -- lowlight color (RGBA)
 							{ 1,   1,   1,   1 }) -- highlight color (RGBA)
+					end
 
-						-- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
+					-- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
+					if indicatorPosE ~= nil then
 						RectRound(
 							barArea[1] + (indicatorPosE * barWidth) - energyIndicatorHalfWidth, -- left
-							barArea[4] - barIntrusion, -- bottom
+							barArea[4] - barIntrusion, -- top of the bar, minus an intrusion downward
 							barArea[1] + (indicatorPosE * barWidth) + energyIndicatorHalfWidth, -- right
-							barArea[4] - barIntrusion + indicatorH, -- top
+							barArea[4] - barIntrusion + indicatorH, -- top of the bar, minus an intrusion downward, plus the indicator's height
 							cornerSize,
 							0, 0, 1, 1, -- don't round TopLeft, TopRight but round BottomRight, BottomLeft (so it looks like it's pointing downward)
-							{0.8, 0.8, 0.4, 1}, -- lowlight color (RGBA)
-							{1,   1,   0.6, 1}) -- highlight color (RGBA)
-
-						Log("sliders end" ..i)
+							{0.8, 0.8, 0.0, 1}, -- lowlight color (RGBA)
+							{ 1, 1, 0.2, 1 }) -- highlight color (RGBA)
 					end
+
+					Log("sliders end" ..i)
 				end
 			end
 		end
@@ -1093,28 +1142,70 @@ local function updateResbar(res)  --decides where and what is drawn
 			WG['tooltip'].AddTooltip(res .. '_share_slider', { resbarDrawinfo[res].barArea[1], shareIndicatorArea[res][2], resbarDrawinfo[res].barArea[3], shareIndicatorArea[res][4] }, Spring.I18N('ui.topbar.resources.shareMetalTooltip'), nil, Spring.I18N('ui.topbar.resources.shareMetalTooltipTitle'))
 		end
 		if res == 'BP' and drawBPBar == true then -- for bp bar only
-			if not (res == 'BP' and proMode == false) then -- too much info for some users while early testing
-				WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] },
-					tostring(totallyUsedBP) .." BP is actually used")
-				WG['tooltip'].AddTooltip(res .. '_storage', { resbarDrawinfo[res].textStorage[2] - (resbarDrawinfo[res].textStorage[4] * 2.75), resbarDrawinfo[res].textStorage[3], resbarDrawinfo[res].textStorage[2], resbarDrawinfo[res].textStorage[3] + resbarDrawinfo[res].textStorage[4] },
-					"You have a total of " ..tostring(BP[4]) .." build power.")
-				WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] },
-					tostring(avgTotalReservedBP ) .." BP is reserved for current and comming projects")
-			end
-
 			-- TODO: ensure these are consistent with text/highlight colors elsewhere in BAR.
 			local textColor = '\255\215\215\215'
 			local highlightColor = '\255\255\255\255'
 			local avgTotalReservedBP = math.round(BP[3])
 			local totalAvailableBP = BP[4]
 			local avgTotalUsedBP = math.round(BP[5])
-			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] },
-				textColor .. "You have a total of " .. highlightColor .. totalAvailableBP .. textColor .. " build power (BP).\n" ..
-				"You are using " .. highlightColor .. avgTotalUsedBP .. textColor .. " BP, " ..
-				"with " .. highlightColor .. avgTotalReservedBP .. textColor .. " reserved.\n(Reserved: in-use, walking to a structure, or stalled.)", nil, "Build Power")
-			WG['tooltip'].AddTooltip(res .. '_Current', { resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.75), resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4] },
-				"your idling BP is costing you " ..tostring(currentResValue[res]) .."s of metal income. Consider less BP if this number is above 20")
-		elseif res ~= 'BP' or drawBPBar == true then
+
+			--WG['tooltip'].RemoveTooltip(res .. '_all')
+			local bpTooltipTitle = "Buildpower"
+			local bpTooltipText = textColor .. "You have a total of " .. highlightColor .. totalAvailableBP .. textColor .. " buildpower (BP).\n"
+				.. textColor .. "You are using " .. highlightColor .. avgTotalUsedBP .. textColor .. " BP (green), "
+				.. textColor .. "with " .. highlightColor .. avgTotalReservedBP .. textColor .. " reserved (dark green).\n"
+				.. textColor .. "(Reserved: in-use, walking to a structure, or stalled.)\n\n"
+				.. textColor .. "You have " .. highlightColor .. (totalAvailableBP - avgTotalReservedBP) .. textColor .." idle BP (red)."
+
+			if drawBPIndicators and BP[10] ~= nil and BP[11] ~= nil then
+				bpTooltipText = bpTooltipText .. "\n\n"
+					.. textColor .."If no builders were idle, your metal and energy income\n"
+					.. textColor .."would support an estimated " .. highlightColor .. math_ceil(BP[10] * 100) .. textColor .. "% and ".. highlightColor .. math_ceil(BP[11] * 100) .. textColor .. "% of your BP\n"
+					.. textColor .."(grey and yellow indicators on bar)."
+			end
+
+			if proMode then
+				bpTooltipText = bpTooltipText
+				    .. "\n\nDEBUG:"
+				    .. float_to_s(BP[5]) .. " BP used, " .. float_to_s(BP['usedBPIfNoStall']) .. " if no stall \n"
+					.. tostring(BP[4]) .. " total BP \n"
+					.. float_to_s(BP['usedBPMetalExpense']) .." M spent by builders, \n"
+					.. float_to_s(BP['usedBPEnergyExpense']) .. " E spent by builders, \n"
+					.. float_to_s(BP['nonBPMetalExpense']) .. " M spent by non-builders, \n"
+					.. float_to_s(BP['nonBPEnergyExpense']) .. " E spent by non-builders, \n"
+					.. float_to_s(BP['metalExpense']) .. " / " .. float_to_s(BP['energyExpense']) .. " metal/energy expense, \n"
+					.. float_to_s(BP['metalExpensePerBP']) .. " / " .. float_to_s(BP['energyExpensePerBP']) .. " M/E expense per BP, \n"
+					.. "\nprojections:\n"
+					.. float_to_s(BP['metalExpenseIfAllBPUsed']) .. " M spent if all BP is used, \n"
+					.. float_to_s(BP['energyExpenseIfAllBPUsed']) .. " E spent if all BP is used, \n"
+					.. float_to_s(BP['metalSupportedBP']) .. " BP supported by M income, \n"
+					.. float_to_s(BP['energySupportedBP']) .. " BP supported by E income,"
+			end
+
+			-- One tooltip for the entire BP area, which isn't that big.
+			WG['tooltip'].AddTooltip(res .. '_all', {
+					resbarDrawinfo[res].barArea[1],--resbarArea[res][1],
+					resbarDrawinfo[res].barArea[2],--resbarArea[res][2],
+					resbarDrawinfo[res].barArea[3],--resbarArea[res][3],
+					resbarDrawinfo[res].barArea[4],--resbarArea[res][4],
+				},
+				bpTooltipText, nil, bpTooltipTitle)
+
+			local bpSurplus = BP['buildpowerSurplus']
+
+			local currentTooltipText = "Your buildpower surplus can't be calculated yet."
+			if bpSurplus ~= nil then
+				if bpSurplus == 0 then
+					currentTooltipText = textColor .. "You have just enough buildpower to keep up with your income"
+				elseif bpSurplus > 0 then
+					currentTooltipText = textColor .. "You have " .. highlightColor .. bpSurplus .. textColor .. " buildpower more than you need " .. textColor .. "to keep up with your income"
+				else
+					currentTooltipText = textColor .. "You need " .. highlightColor .. -bpSurplus .. textColor .. " more buildpower " .. textColor .. "to keep up with your income"
+				end
+			end
+			WG['tooltip'].AddTooltip(res .. '_Current', { resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.75), resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4] }, currentTooltipText)
+
+		elseif res ~= 'BP' then
 			WG['tooltip'].AddTooltip(res .. '_pull', { resbarDrawinfo[res].textPull[2] - (resbarDrawinfo[res].textPull[4] * 2.5), resbarDrawinfo[res].textPull[3], resbarDrawinfo[res].textPull[2] + (resbarDrawinfo[res].textPull[4] * 0.5), resbarDrawinfo[res].textPull[3] + resbarDrawinfo[res].textPull[4] }, Spring.I18N('ui.topbar.resources.pullTooltip', { resource = resourceName }))  
 			WG['tooltip'].AddTooltip(res .. '_income', { resbarDrawinfo[res].textIncome[2] - (resbarDrawinfo[res].textIncome[4] * 2.5), resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[2] + (resbarDrawinfo[res].textIncome[4] * 0.5), resbarDrawinfo[res].textIncome[3] + resbarDrawinfo[res].textIncome[4] }, Spring.I18N('ui.topbar.resources.incomeTooltip', { resource = resourceName })) 
 			WG['tooltip'].AddTooltip(res .. '_expense', { resbarDrawinfo[res].textExpense[2] - (4 * widgetScale), resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[2] + (30 * widgetScale), resbarDrawinfo[res].textExpense[3] + resbarDrawinfo[res].textExpense[4] }, Spring.I18N('ui.topbar.resources.expenseTooltip', { resource = resourceName })) 
@@ -1170,10 +1261,10 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 					color2 = { 0.5, 0.75, 0, 1 }
 					glowAlpha = 0.035 + (0.06 * math_min(1, cappedCurRes / r[res][2] * 40))
 				end
-				RectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 1, 1, 1, 1, color1, color2)
+				RectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 1, 1, 1, 1, color1, color2)
 
 				local borderSize = 1
-				RectRound(resbarDrawinfo[res].barTexRect[1]+borderSize, resbarDrawinfo[res].barTexRect[2]+borderSize, resbarDrawinfo[res].barTexRect[1] + valueWidth-borderSize, resbarDrawinfo[res].barTexRect[4]-borderSize, barHeight * 0.2, 1, 1, 1, 1, { 0, 0, 0, 0.1 }, { 0, 0, 0, 0.17 })
+				RectRound(resbarDrawinfo[res].barArea[1]+borderSize, resbarDrawinfo[res].barArea[2]+borderSize, resbarDrawinfo[res].barArea[1] + valueWidth-borderSize, resbarDrawinfo[res].barArea[4]-borderSize, barHeight * 0.2, 1, 1, 1, 1, { 0, 0, 0, 0.1 }, { 0, 0, 0, 0.17 })
 
 				-- Bar value glow
 				glBlending(GL_SRC_ALPHA, GL_ONE)
@@ -1188,14 +1279,14 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 				if res == 'BP' and drawBPBar == true then -- for bp bar only
 					local color1Secondary = { 0.1, 0.55, 0, 0.5 } 
 					local color2Secondary = { 0.3, 0.65, 0, 0.5 }
-					RectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth + additionalWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 1, 1, 1, 1, color1Secondary, color2Secondary)
+					RectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth + additionalWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 1, 1, 1, 1, color1Secondary, color2Secondary)
 				end
 
 				if res == 'metal' then
 					-- noise
 					gl.Texture(noiseBackgroundTexture)
 					gl.Color(1, 1, 1, 0.37)
-					TexturedRectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 1, 1, 1, 1, barWidth * 0.33, 0)
+					TexturedRectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 1, 1, 1, 1, barWidth * 0.33, 0)
 					gl.Texture(false)
 				end
 
@@ -1210,26 +1301,25 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 			gl.Color(1, 1, 1, 0.33)
 			glBlending(GL_SRC_ALPHA, GL_ONE)
 			glTexture("LuaUI/Images/paralyzed.png")
-			TexturedRectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.5, -os.clock()/80)
-			TexturedRectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.33, os.clock()/70)
-			TexturedRectRound(resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2], resbarDrawinfo[res].barTexRect[1] + valueWidth, resbarDrawinfo[res].barTexRect[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.45, -os.clock()/55)
+			TexturedRectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.5, -os.clock()/80)
+			TexturedRectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.33, os.clock()/70)
+			TexturedRectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 0, 0, 1, 1, barWidth/0.45, -os.clock()/55)
 			glTexture(false)
 
 			-- colorize a bit more (with added size)
 			local addedSize = math_floor(((resbarDrawinfo[res].barArea[4] - resbarDrawinfo[res].barArea[2]) * 0.15) + 0.5)
 			gl.Color(1, 1, 0, 0.14)
-			RectRound(resbarDrawinfo[res].barTexRect[1]-addedSize, resbarDrawinfo[res].barTexRect[2]-addedSize, resbarDrawinfo[res].barTexRect[1] + valueWidth + addedSize, resbarDrawinfo[res].barTexRect[4] + addedSize, barHeight * 0.33)
+			RectRound(resbarDrawinfo[res].barArea[1]-addedSize, resbarDrawinfo[res].barArea[2]-addedSize, resbarDrawinfo[res].barArea[1] + valueWidth + addedSize, resbarDrawinfo[res].barArea[4] + addedSize, barHeight * 0.33)
 			glBlending(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 		end
 		if updateText then
 			currentResValue[res] = short(cappedCurRes)
 			if not dlistResValues[res][currentResValue[res]] then
 				if res == 'BP' and drawBPBar == true then
-					local _, _, _, incomeMetal, _ = spGetTeamResources(myTeamID, 'metal')
-					if incomeMetal and incomeMetal ~= 0 then
-						currentResValue[res] = math_floor((r[res][2] - r[res][1]) / incomeMetal)
+					if BP['buildpowerSurplus'] == nil then
+						currentResValue[res] = ""
 					else
-						currentResValue[res] = 0
+						currentResValue[res] = BP['buildpowerSurplus']
 					end
 				end
 				dlistResValues[res][currentResValue[res]] = glCreateList(function()
@@ -1239,25 +1329,20 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 						font2:SetTextColor(0.95, 0.95, 0.95, 1)
 					elseif  res == 'energy' then
 						font2:SetTextColor(1, 1, 0.74, 1)
-					elseif drawBPBar == true then  -- for bp bar only
-						local color 
-						if currentResValue[res] > 120 then color = { 0.82, 0.39, 0.39, 1.0 } --Red 
-						elseif currentResValue[res] > 80 then color = { 1.0, 0.39, 0.39, 1.0 } --Orange 
-						elseif currentResValue[res] > 40 then color = { 1.0, 1.0, 0.39, 1.0 } --Yellow 
-						elseif currentResValue[res] > 20 then color = { 0.84, 0.90, 0.39, 1.0 } --Bright Yellow
-						else color = {0.0, 1.0, 0.39, 1.0} end --Green 
+					elseif drawBPBar and BP['buildpowerSurplus'] ~= nil then  -- for bp bar only
+						local color
+						if     currentResValue[res] < -400 then color = { 0.82, 0.39, 0.39, 1.0 } --Red
+						elseif currentResValue[res] < -300 then color = { 1.0,  0.39, 0.39, 1.0 } --Orange
+						elseif currentResValue[res] < -100 then color = { 1.0,  1.0,  0.39, 1.0 } --Yellow
+						elseif currentResValue[res] <    0 then color = { 0.84, 0.90, 0.39, 1.0 } --Light Yellow
+						else                                    color = { 0.55, 0.55, 0.55, 1.0 } --Grey: no judgment as to how _much_ surplus someone has, as long as it's non-negative
+						end
 						font2:SetTextColor(color[1], color[2], color[3], color[4])
 					end
 					-- Text: current
-					if res == 'BP' and drawBPBar == true then -- for bp bar only
-						font2:SetOutlineColor(0, 0, 0, 1)
-						--font2:Print(currentResValue[res] .."s", resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
-						font2:End()
-					else
-						font2:SetOutlineColor(0, 0, 0, 1)
-						font2:Print(currentResValue[res], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
-						font2:End()
-					end
+					font2:SetOutlineColor(0, 0, 0, 1)
+					font2:Print(currentResValue[res], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
+					font2:End()
 				end)
 			end
 		end
@@ -1284,8 +1369,10 @@ function init()
 	-- metal
 
 	local width = math_floor(totalWidth / 4.4)
-	if drawBPBar == true then 
-		width = math_floor(totalWidth / 6) --xxx  5.5
+	local bpWidth = proMode and math_floor(totalWidth / 6) or math_floor(totalWidth / 12)
+	if drawBPBar then
+		-- If we allocate totalWidth / 2 for M/E/BP bars, give M/E bars whatever's left after BP.
+		width = math_floor((totalWidth / 2 - bpWidth) / 2)
 	end
 	resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
@@ -1295,9 +1382,9 @@ function init()
 	resbarArea['energy'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar('energy')
-	if drawBPBar == true then
-		resbarArea['BP'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
-		filledWidth = filledWidth + width + widgetSpaceMargin
+	if drawBPBar then
+		resbarArea['BP'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + bpWidth, topbarArea[4] }
+		filledWidth = filledWidth + bpWidth + widgetSpaceMargin
 		updateResbar('BP')
 	end
 
@@ -1420,8 +1507,8 @@ function widget:GameFrame(n)
 				local cacheMetalCostOfUsedBuildPower = 0
 
 				-- How much metal and energy are being pulled by builders, specifically? (As opposed to metal extractors, etc.)
-				local usedBPMetalPull = 0
-				local usedBPEnergyPull = 0
+				local usedBPMetalExpense = 0
+				local usedBPEnergyExpense = 0
 				local buildingBP = 0 -- how much BP is actively building, regardless of how stalled it is?
 
 				--local nowChecking = 0 -- counter for trackedUnits per frame
@@ -1445,8 +1532,8 @@ function widget:GameFrame(n)
 								cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
 								local builtUnitID = spGetUnitIsBuilding(unitID)
 								if builtUnitID then
-									usedBPMetalPull = usedBPMetalPull + currentlyUsedM
-									usedBPEnergyPull = usedBPEnergyPull + currentlyUsedE -- A builder may be cloaked, but not while it's building
+									usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
+									usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
 									addStalling = false
 									local prio = checkPriority(unitID)
@@ -1483,8 +1570,8 @@ function widget:GameFrame(n)
 				cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
 
 				-- How much metal and energy are builders pulling? (This number will drop when they become resource-stalled, perhaps due to being low-priority.)
-				BP['usedBPMetalPull'] = usedBPMetalPull
-				BP['usedBPEnergyPull'] = usedBPEnergyPull
+				BP['usedBPMetalExpense'] = usedBPMetalExpense
+				BP['usedBPEnergyExpense'] = usedBPEnergyExpense
 				BP['usedBPIfNoStall'] = buildingBP
 
 				trackPosBase = trackPosBase + unitsPerFrame
@@ -1519,12 +1606,6 @@ function widget:GameFrame(n)
 
 				local indicatorPosM = BP[8]
 				local indicatorPosE = BP[9]
-				if indicatorPosM == nil or indicatorPosM > 1 then --be save that the usefulBPFactorM isn't nil or over 100%
-					indicatorPosM = 1
-				end
-				if indicatorPosE == nil or indicatorPosE > 1 then --be save that the usefulBPFactorE isn't nil or over 100%
-					indicatorPosE = 1
-				end
 				BP[10] = indicatorPosM
 				BP[11] = indicatorPosE
 			end
@@ -1538,6 +1619,8 @@ function widget:GameFrame(n)
 			local totallyUsedBP = cacheDataBase[5]
 			trackPosBase = 0
 			if drawBPBar == true then --this section will smooth the values so that factories that finish units won't have too much of an impact
+
+				-- TODO: remove this now that the PID controller does the smoothing
 				table.insert(totalReservedBPData, totalReservedBP)
 				if #totalReservedBPData > 30 then --so a grand total of x refresh cicles is considdered (search for "if gameFrame % = " to find the time steps )
 					table.remove(totalReservedBPData, 1)
@@ -1562,6 +1645,21 @@ function widget:GameFrame(n)
 				end
 
 				avgTotalUsedBP = math.floor(avgTotalUsedBP / #totalUsedBPData)
+
+				-- Use a PID controller to smooth the used/reserved indicators.
+				local Kp = 0.25
+				local Ki = 0.1
+				local Kd = 0
+				if BP['pidBPGameTime'] == 0 then
+					dt = 1
+				else
+					dt = gameFrame - BP['pidBPGameTime']
+				end
+				BP['pidBPGameTime'] = gameFrame
+
+				avgTotalReservedBP, BP['reservedBPIntegral'], BP['reservedBPError'] = pid(Kp, Ki, Kd, dt, BP['reservedBPIntegral'], BP['reservedBPError'], totalReservedBP, BP[3])
+				avgTotalUsedBP,     BP['usedBPIntegral'],     BP['usedBPError']     = pid(Kp, Ki, Kd, dt, BP['usedBPIntegral'], BP['usedBPError'], totallyUsedBP, BP[5])
+
 				BP[1] = cacheDataBase[1]
 				BP[3] = avgTotalReservedBP
 				updateResbar('BP')
@@ -1618,78 +1716,75 @@ local function updateAllyTeamOverflowing()
 				end
 			end
 
-
-			-- needed for exact calculations
-			local realMetalPull = metalPull
-			local realEnergyPull = energyPull
-			if BP[6] then
-				totalStallingM = BP[6]
-				totalStallingE = BP[7]
-			end	
-			addStalling = false 
-			for unitID, currentUnitBP in pairs(trackedBuilders) do
-				if addStalling == true then 
-					break
-				end
-				local prio = checkPriority(unitID)
-				if checkPriority(unitID) == "low" then
-					addStalling = true
-				end 
-			end
-			if totalStallingM and totalStallingE then
-				if addStalling == true then
-					realMetalPull = metalPull + totalStallingM
-					realEnergyPull = energyPull + totalStallingE
-				end 
-			end -- until here
 			if res ~= 'BP' or drawBPBar == true then
 
-				-- If nobody is building, just assume our eco can fully-support all builders.
-				local usefulBPFactorM = 1
-				local usefulBPFactorE = 1
+				-- If nobody is building, don't make any assumptions about how much BP our eco can support
+				local usefulBPFactorM = nil
+				local usefulBPFactorE = nil
 
 				local totalBP = BP[4]
 				local usedBP = BP[5]
-				--local usedBPIfNoStall = BP['usedBPIfNoStall']
+				BP['buildpowerSurplus'] = nil
 
 				-- What if all builders were active and pulled metal and energy in the same proportions as current builders?
-				-- (Note that we can't figure this out if nobody is building.)
+				-- (We can only calculate this if at least one builder is building.)
 				if usedBP >= 1 then
+					-- Assume our eco supports full BP until we calculate otherwise.
+					-- This assumption only matters if our builders are spending metal OR energy but not both (e.g., building basic sollar collectors).
+					usefulBPFactorM = 1
+					usefulBPFactorE = 1
+
 					-- How much metal and energy are we spending _not_ due to builders?
-					local metalExpenseMinusBuilders = metalExpense - BP['usedBPMetalPull']
-					local energyExpenseMinusBuilders = energyExpense - BP['usedBPEnergyPull']
-					BP['nonBPMetalPull'] = metalPullMinusBuilders
-					BP['nonBPEnergyPull'] = energyPullMinusBuilders
-					BP['metalPull'] = metalPull
-					BP['realMetalPull'] = realMetalPull
+					local metalExpenseMinusBuilders = metalExpense - BP['usedBPMetalExpense']
+					local energyExpenseMinusBuilders = energyExpense - BP['usedBPEnergyExpense']
+					BP['nonBPMetalExpense'] = metalExpenseMinusBuilders
+					BP['nonBPEnergyExpense'] = energyExpenseMinusBuilders
 					BP['metalExpense'] = metalExpense
-					BP['energyPull'] = energyPull
-					BP['realEnergyPull'] = realEnergyPull
 					BP['energyExpense'] = energyExpense
 
-					local metalExpenseIfAllBuilders = metalExpenseMinusBuilders + BP['usedBPMetalPull'] * totalBP / usedBP
-					local energyExpenseIfAllBuilders = energyExpenseMinusBuilders + BP['usedBPEnergyPull'] * totalBP / usedBP
-					BP['mPullAllBP'] = metalExpenseIfAllBuilders
-					BP['ePullAllBP'] = energyExpenseIfAllBuilders
+					BP['metalExpensePerBP'] = BP['usedBPMetalExpense'] / usedBP
+					BP['energyExpensePerBP'] = BP['usedBPEnergyExpense'] / usedBP
+					BP['metalExpenseIfAllBPUsed'] = metalExpenseMinusBuilders + BP['metalExpensePerBP'] * totalBP
+					BP['energyExpenseIfAllBPUsed'] = energyExpenseMinusBuilders + BP['energyExpensePerBP'] * totalBP
 
-					if metalExpenseIfAllBuilders >= 1 then
-						usefulBPFactorM = metalIncome / metalExpenseIfAllBuilders
+					BP['metalSupportedBP'] = nil
+					BP['energySupportedBP'] = nil
+					local minSupportedBP = 0
+
+					if BP['metalExpensePerBP'] > 0 then
+						BP['metalSupportedBP'] = (metalIncome - metalExpenseMinusBuilders) / BP['metalExpensePerBP']
+						minSupportedBP = BP['metalSupportedBP']
 					end
 
-					if energyExpenseIfAllBuilders >= 1 then
-						usefulBPFactorE = energyIncome / energyExpenseIfAllBuilders
+					if BP['energyExpensePerBP'] > 0 then
+						BP['energySupportedBP'] = (energyIncome - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
+						minSupportedBP = BP['energySupportedBP']
+					end
+
+					if BP['metalSupportedBP'] ~= nil or BP['energySupportedBP'] ~= nil then
+						if BP['metalSupportedBP'] ~= nil and BP['energySupportedBP'] ~= nil then
+							minSupportedBP = math_min(BP['metalSupportedBP'], BP['energySupportedBP'])
+						end
+
+						-- How much buildpower do we have, beyond what's necessary to keep up with our economy?
+						BP['buildpowerSurplus'] = totalBP - minSupportedBP
+						-- round up to the nearest 10 BP
+						BP['buildpowerSurplus'] = math.ceil(BP['buildpowerSurplus'] / 10) * 10
+					end
+
+					if BP['metalExpenseIfAllBPUsed'] >= 1 then
+						usefulBPFactorM = math.min(1, metalIncome / BP['metalExpenseIfAllBPUsed'])
+					end
+
+					if BP['energyExpenseIfAllBPUsed'] >= 1 then
+						usefulBPFactorE = math.min(1, energyIncome / BP['energyExpenseIfAllBPUsed'])
 					end
 				end
 
 				BP[8] = usefulBPFactorM
 				BP[9] = usefulBPFactorE
-				if usefulBPFactorM < 0.8 and metal < 2 * metalPull then
-					playerStallingMetal = 1
-				end
-
-				if usefulBPFactorE < 0.8 and energy < 2 * energyPull then
-					playerStallingEnergy = 1
-				end
+				playerStallingMetal = (usefulBPFactorM ~= nil and usefulBPFactorM < 0.8 and metal < 2 * metalPull)
+				playerStallingEnergy = (usefulBPFactorE ~= nil and usefulBPFactorE < 0.8 and energy < 2 * energyPull)
 			end
 		end
 	end
@@ -1952,11 +2047,11 @@ local function drawResBars() --hadles the blinking
 			glCallList(dlistResbar[res][1])
 
 			if not spec and gameFrame > 90 then
-				if playerStallingMetal then
-					glColor(0.0, -0.4, -0.4, 0.5 * playerStallingMetal * blinkProgress)
-				elseif playerStallingEnergy then
-					glColor(0.2, -0.2, -1, 0.5 * playerStallingEnergy * blinkProgress)
-				end
+				--if playerStallingMetal then
+				--	glColor(0.0, -0.4, -0.4, 0.5 * playerStallingMetal * blinkProgress)
+				--elseif playerStallingEnergy then
+				--	glColor(0.2, -0.2, -1, 0.5 * playerStallingEnergy * blinkProgress)
+				--end
 				if playerStallingMetal or playerStallingEnergy then
 					glCallList(dlistResbar[res][4])
 				end
@@ -2747,6 +2842,20 @@ function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likel
         end
     end
     return false, nil
+end
+
+function pid(Kp, Ki, Kd, dt, prevIntegral, prevError, setPoint, measuredValue)
+	if dt <= 0 then
+		return measuredValue, prevIntegral, prevError
+	end
+	-- setpoint: instantaneous observed value
+	-- measuredValue: position of displayed indicator
+    local error = setPoint - measuredValue
+    local proportional = error;
+    local integral = prevIntegral + error * dt
+    local derivative = (error - prevError) / dt
+    local output = Kp * proportional + Ki * integral + Kd * derivative
+    return output, integral, error
 end
 
 function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculations
