@@ -46,7 +46,7 @@ The widget calculates how much you're lagging in utilizing your build power (BP)
 
 - **Calculation Logic**: It divides the total metal cost of unused build power by your current metal production.
 - **Color Coding**: Green indicates good efficiency, while red indicates poor efficiency. Shades in between represent moderate levels of efficiency.
-- **Detail Calculation**: It considers the type and metal cost of idle constructors to show how many seconds of metal income are unproductive.
+- **Detail Calculation**: It considers the type and metal cost of idle constructors to show how many seconds of metal income are wasted in unproductive build power. A simple example: A T2 factory (3k metal) and 5 con turrets (1k metal) are idling. Your income is 20metal/sec -> if you would reclaim all this your AFUS could be finished 200 seconds earlier. 
 
 ## Feedback and Contributions
 Your feedback and contributions are welcome! Feel free to raise issues or submit pull requests on our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR).
