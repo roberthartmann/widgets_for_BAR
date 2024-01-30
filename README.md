@@ -64,7 +64,7 @@ They show you if you need more build power or you have to much.
 - **Energy is needed for resurrecting units. That can easily underestimated** Rez bots are cheap, they are cool. They suck the live out of your eco! The energy slider will you that. Be aware of that fact!
 
 ### A quick example
-Here you can see that you are sucking your E-storage at an "not good" rate. You will stall on energy soon. Then your metal extractors might even produce less metal. After a while the metal storage will be empty, too. That is better normaly.
+Here you can see that you are sucking your E-storage at an "not good" rate. You will stall on energy soon. Then your metal extractors might even produce less metal. After a while the metal storage will be empty, too. That is better normaly. The solution? Take your commander, build wind/solar. That will reduce your need for energy and it will raise your e-income. A win win situation :)
 ![sliders_01](https://raw.githubusercontent.com/roberthartmann/widgets_for_BAR/main/readme_pics/sliders_01.png)
 
 ## Feedback and Contributions
