@@ -3,7 +3,7 @@ function widget:GetInfo()
 		name = "Top Bar with Buildpower",
 		desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
 		author = "Floris and Floris and Floris and Robert82 and gmcnew",
-		date = "2024-01-31",
+		date = "2024-02-01",
 		-- created Feb, 2017
 		license = "GNU GPL, v2 or later", 
 		layer = -999999, 
@@ -28,20 +28,31 @@ local metalCostForCommander = 1250
 local includeFactories = true 
 local proMode = false
 local drawBPBar = true
+
+-- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
 local drawBPIndicators = true
 
 -- stores the date that is used for the res calc and BP bar
 local BP = {0, 0, 0.1, 0, 0, 1, 1}
 
-local totalUsedBPData = {} -- used to calculate the avarage used BP
-local totalReservedBPData = {} -- used to calculate the avarage reserved BP
-
 -- Used to store recent positions of the M/E-supported sliders on the BP bar so they can be moved more smoothly.
 BP['mSliderPositions'] = {}
 BP['eSliderPositions'] = {}
+BP['metalIncome'] = 0
+BP['energyIncome'] = 0
+BP['metalExpense'] = 0
+BP['energyExpense'] = 0
 
-BP['instantaneousReservedBP'] = 0
-BP['instantaneousUsedBP'] = 0
+-- Lists of recent datapoints, used for smoothing. The first element is the number of datapoints to keep, the second is the datapoints themselves.
+BP['history_usedBP'] = { 30, {} } -- used to calculate the avarage used BP
+BP['history_reservedBP'] = { 30, {} } -- used to calculate the avarage reserved BP
+BP['history_nonBuilderMetalExpense'] = { 100, {} } -- average metal expense from non-builders
+BP['history_nonBuilderEnergyExpense'] = { 100, {} } -- average energy expense from non-builders
+BP['history_mSliderPosition'] = { 30, {} } -- average metal expense from non-builders
+BP['history_eSliderPosition'] = { 30, {} } -- average energy expense from non-builders
+
+BP['reservedBP_instant'] = 0
+BP['usedBP_instant'] = 0
 
 local unitsPerFrame = 100 --limit processed units per frame to improve performance
 local trackedNum = 0
@@ -52,6 +63,8 @@ cacheDataBase['usedBPMetalExpense'] = 0
 cacheDataBase['usedBPEnergyExpense'] = 0
 cacheDataBase['usedBPExceptStalled'] = 0
 cacheDataBase['usedBPIfNoStall'] = 0
+cacheDataBase['metalIncome'] = 0
+cacheDataBase['energyIncome'] = 0
 cacheDataBase['metalExpense'] = 0
 cacheDataBase['energyExpense'] = 0
 local trackedBuilders = {} -- stores units of the player and theit BP
@@ -727,9 +740,7 @@ local function updateResbarText(res)
 			-- Text: income
 			if res ~= 'BP' then
 				font2:Print("\255\120\235\120" .. "+" .. short(r[res][4]), resbarDrawinfo[res].textIncome[2], resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[4], resbarDrawinfo[res].textIncome[5])
-			elseif res == 'BP' then
-				--font2:Print("\001\100\100\100" .. short(r[res][2]), resbarDrawinfo[res].textIncome[2], resbarDrawinfo[res].textIncome[3], resbarDrawinfo[res].textIncome[4], resbarDrawinfo[res].textIncome[5]) --don't show metal cost
-			end	
+			end
 			font2:End()
 
 			local startingFrame = 90
@@ -737,42 +748,60 @@ local function updateResbarText(res)
 				startingFrame = 1
 			end
 			if not spec and gameFrame > startingFrame then
-				-- display overflow notification
-				local indicatorPosM = BP['mSliderPosition']
-				local indicatorPosE = BP['eSliderPosition']
 
-				-- These two messages aren't very useful -- just look at the metal and energy bars. Only show these alerts in pro mode.
-				local notifyMetalStall = proMode and playerStallingMetal
-				local notifyEnergyStall = proMode and playerStallingEnergy
+				local notifyMetalStall = playerStallingMetal
+				local notifyEnergyStall = playerStallingEnergy
 
 				-- Only warn about buildpower surplus in pro mode.
 				local notifyBPSurplus = false
 				local notifyBPDeficit = false
+				local reservedBP = BP[3]
+				local totalBP = BP[4]
+				local notifyBPIdle = reservedBP / totalBP <= 0.5 and (totalBP - reservedBP) > 300
 				if BP['buildpowerSurplus'] ~= nil then
-					-- Buildpower surplus is calculated based on current metal/energy income and
-					-- _predicted_ metal/energy expenses if all builders were actively building.
-					-- If this is negative, we have a buildpower deficit -- income exceeds what all
-					-- builders could possibly support.
+					local indicatorPosM = BP['mSliderPosition']
+					local indicatorPosE = BP['eSliderPosition']
+
+					-- Buildpower surplus is calculated based on current metal/energy income and _predicted_ metal/
+					-- energy expenses if all builders were actively building. If this is negative, we have a buildpower
+					-- deficit, since income exceeds what all builders could possibly support.
 					notifyBPDeficit = BP['buildpowerSurplus'] < 0
 
-					-- A surplus isn't necessarily a problem, as builders don't spend 100% of their
-					-- time building if they're driving from one location to another. Perhaps a
-					-- surplus should be calculated as the amount of BP that's actively building yet
-					-- stalled. (But even this might be redundant given the "Need metal" or "Need
-					-- energy" overflow tooltip.)
+					-- A surplus isn't necessarily a problem, as builders don't spend 100% of their time building (if
+					-- they're driving from one location to another, for instance). And in the early-game your commander
+					-- alone will likely cause a buildpower surplus. For now, let's only warn about a surplus that
+					-- exceeds a fixed number _and_ a fixed ratio of eco-supported BP.
 
-					-- Until this is ironed out, only show the surplus alert in pro mode.
-					notifyBPSurplus = proMode
-						-- try to ignore early-game states where we may only have the commander and a single factory on the map
-						and BP['buildpowerSurplus'] > 400
-						-- only warn about a surplus if less than 40% of our BP can be supported by our income
+					-- Later, we might want to focus just on the amount of BP that's actively building yet stalled, to
+					-- ignore any BP that's on guard/repair/reclaim duty. (But even a stalled-only surplus warning might
+					-- be redundant given the existing "Need metal"/"Need energy" overflow tooltips.)
+
+					-- Try to ignore early-game states where we may only have the commander and a single factory on the map.
+					notifyBPSurplus = BP['buildpowerSurplus'] > 400
+						-- Only warn about a surplus if less than 40% of our BP can be supported by our income.
 						and ((indicatorPosM ~= nil and indicatorPosM < 0.4) or (indicatorPosE ~= nil and indicatorPosE < 0.4))
+				end
 
+				-- If we're not in pro mode, be more selective with which alerts we show users.
+				if proMode == false then
+
+					-- These two messages aren't very useful, since you can just look at the metal and energy bars.
+					-- Only show these alerts in pro mode.
+					notifyMetalStall = false
+					notifyEnergyStall = false
+
+					-- Try to only show the most important alert at a time.
+					if notifyBPDeficit then
+						notifyBPIdle = false
+						notifyBPSurplus = false -- shouldn't happen at the same time as a deficit, but leaving it just in case
+					elseif notifyBPIdle then
+						notifyBPSurplus = false
+					end
 				end
 
 				if (res == 'metal' and (allyteamOverflowingMetal or overflowingMetal))
 						or (res == 'energy' and (allyteamOverflowingEnergy or overflowingEnergy))
-						or (res == 'BP' and drawBPBar and (notifyMetalStall or notifyEnergyStall or notifyBPSurplus or notifyBPDeficit)) then
+						or (res == 'BP' and drawBPBar and (notifyMetalStall or notifyEnergyStall or notifyBPSurplus or notifyBPDeficit or notifyBPIdle)) then
 					if showOverflowTooltip[res] == nil then
 						showOverflowTooltip[res] = os.clock() + 1.1
 					end
@@ -858,52 +887,30 @@ local function updateResbarText(res)
 						if res ~= 'BP' then
 							font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
 						elseif drawBPBar then
-							local metalText = '   Need Metal   '
-							local metalTextWidth = font2:GetTextWidth(metalText) * fontSize
-							local energyText ='   Need Energy   '
-							local energyTextWidth = font2:GetTextWidth(energyText) * fontSize
-							local excessBpText ='   Too much buildpower   '
-							local excessBpTextWidth = font2:GetTextWidth(excessBpText) * fontSize
-							local bpDeficitText ='   Need buildpower   '
-							local bpDeficitTextWidth = font2:GetTextWidth(bpDeficitText) * fontSize
 							local offset = 0
 
+							local warning_lowlight = { 0.35, 0.1, 0.1, 1 }
+							local warning_highlight = { 0.25, 0.05, 0.05, 1 }
+							local info_lowlight = { 0.20, 0.20, 0.20, 1 }
+							local info_highlight = { 0.12, 0.12, 0.12, 1 }
 							if notifyMetalStall then
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
-								RectRound(resbarArea[res][3] - (offset + metalTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
-								RectRound(resbarArea[res][3] - (offset + metalTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-								font2:Print(metalText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-								offset = offset + energyTextWidth
+								offset = showBuildpowerAlert(resbarArea[res], 'Need metal', fontSize, warning_lowlight, warning_highlight, offset)
 							end
 
 							if notifyEnergyStall then
-								color3 = { 0.35, 0.1, 0.1, 1 }
-								color4 = { 0.25, 0.05, 0.05, 1 }
-								RectRound(resbarArea[res][3] - (offset + energyTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2] , 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
-								color3 = { 0.35, 0.1, 0.1, 1 }
-								color4 = { 0.25, 0.05, 0.05, 1 }
-								RectRound(resbarArea[res][3] - (offset + energyTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color3, color4)
-								font2:Print(energyText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-								offset = offset + energyTextWidth
+								offset = showBuildpowerAlert(resbarArea[res], 'Need energy', fontSize, warning_lowlight, warning_highlight, offset)
 							end
 
 							if notifyBPSurplus then
-								color5 = { 0.20, 0.20, 0.20, 1 }
-								color6 = { 0.12, 0.12, 0.12, 1 }
-								RectRound(resbarArea[res][3] - (offset + excessBpTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
-								font2:Print(excessBpText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-								offset = offset + excessBpTextWidth
+								offset = showBuildpowerAlert(resbarArea[res], 'Too much buildpower', fontSize, info_lowlight, info_highlight, offset)
 							end
 
 							if notifyBPDeficit then
-								color5 = { 0.20, 0.20, 0.20, 1 }
-								color6 = { 0.12, 0.12, 0.12, 1 }
-								RectRound(resbarArea[res][3] - (offset + bpDeficitTextWidth), resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] - offset, resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color5, color6)
-								font2:Print(bpDeficitText, resbarArea[res][3] - offset, resbarArea[res][2] - 9.3 * widgetScale , fontSize, 'or') 
-								offset = offset + bpDeficitTextWidth
+								offset = showBuildpowerAlert(resbarArea[res], 'Need buildpower', fontSize, info_lowlight, info_highlight, offset)
+							end
+
+							if notifyBPIdle then
+								offset = showBuildpowerAlert(resbarArea[res], 'Idle buildpower', fontSize, info_lowlight, info_highlight, offset)
 							end
 						end
 
@@ -915,6 +922,15 @@ local function updateResbarText(res)
 			end
 		end)
 	end
+end
+
+function showBuildpowerAlert(resourceArea, text, fontSize, lowlightColor, highlightColor, offset)
+	text = '   ' .. text .. '   '
+	local textWidth = font2:GetTextWidth(text) * fontSize
+	-- The gradient has the lowlight color at the bottom and the highlight color at the top.
+	RectRound(resourceArea[3] - (offset + textWidth), resourceArea[2] - 15.5 * widgetScale, resourceArea[3] - offset, resourceArea[2], 3.7 * widgetScale, 0, 0, 1, 1, lowlightColor, highlightColor)
+	font2:Print(text, resourceArea[3] - offset, resourceArea[2] - 9.3 * widgetScale , fontSize, 'or')
+	return offset + textWidth
 end
 
 local function updateResbar(res)  --decides where and what is drawn
@@ -1202,9 +1218,10 @@ local function updateResbar(res)  --decides where and what is drawn
 			if proMode then
 				bpTooltipText = bpTooltipText
 				    .. "\n\nDEBUG:"
-				    .. float_to_s(BP[5]) .. " BP used, " .. float_to_s(BP['usedBPIfNoStall']) .. " if no stall \n"
+				    .. float_to_s(avgTotalUsedBP) .. " BP used (smoothed), " .. float_to_s(BP['usedBPIfNoStall']) .. " if no stall \n"
 				    .. float_to_s(BP['usedBPExceptStalled']) .. " BP non-stalled\n"
 					.. tostring(BP[4]) .. " total BP \n"
+					.. float_to_s(BP['metalExpense']) .." M, " .. float_to_s(BP['energyExpense']) .." E spent by all units\n"
 					.. float_to_s(BP['usedBPMetalExpense']) .." M spent by builders, \n"
 					.. float_to_s(BP['usedBPEnergyExpense']) .. " E spent by builders, \n"
 					.. float_to_s(BP['nonBPMetalExpense']) .. " M spent by non-builders, \n"
@@ -1260,7 +1277,7 @@ end
 
 local function drawResbarValues(res, updateText) --drawing the bar itself and value of stored res
 	Log("drawResbarValues")
-	if res ~= 'BP' or drawBPBar == true then
+	if res ~= 'BP' or drawBPBar then
 		local cappedCurRes = r[res][1]    -- limit so when production dies the value wont be much larger than what you can store
     
 		if r[res][1] > r[res][2] * 1.07 then
@@ -1299,7 +1316,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 					color1 = { 0.5, 0.45, 0, 1 }
 					color2 = { 0.8, 0.75, 0, 1 }
 					glowAlpha = 0.035 + (0.07 * math_min(1, cappedCurRes / r[res][2] * 40))
-				elseif drawBPBar == true then -- for bp bar only
+				elseif drawBPBar then -- for bp bar only
 					color1 = { 0.2, 0.65, 0, 1 }
 					color2 = { 0.5, 0.75, 0, 1 }
 					glowAlpha = 0.035 + (0.06 * math_min(1, cappedCurRes / r[res][2] * 40))
@@ -1319,7 +1336,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 				DrawRect((resbarDrawinfo[res].barGlowMiddleTexRect[1] + valueWidth) + (glowSize * 3), resbarDrawinfo[res].barGlowRightTexRect[2], resbarDrawinfo[res].barGlowMiddleTexRect[1] + valueWidth, resbarDrawinfo[res].barGlowRightTexRect[4], 0.008)
 				glTexture(false)
 
-				if res == 'BP' and drawBPBar == true then -- for bp bar only
+				if res == 'BP' and drawBPBar then -- for bp bar only
 					local color1Secondary = { 0.1, 0.55, 0, 0.5 } 
 					local color2Secondary = { 0.3, 0.65, 0, 0.5 }
 					RectRound(resbarDrawinfo[res].barArea[1], resbarDrawinfo[res].barArea[2], resbarDrawinfo[res].barArea[1] + valueWidth + additionalWidth, resbarDrawinfo[res].barArea[4], barHeight * 0.2, 1, 1, 1, 1, color1Secondary, color2Secondary)
@@ -1339,7 +1356,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 		end
 		glCallList(dlistResValuesBar[res][uniqueKey]) --uniqueKey for bp bar only
 
-		if res == 'energy' or (res == 'BP' and drawBPBar == true) then --  or... is for bp bar only
+		if res == 'energy' or (res == 'BP' and drawBPBar) then --  or... is for bp bar only
 			-- energy flow effect
 			gl.Color(1, 1, 1, 0.33)
 			glBlending(GL_SRC_ALPHA, GL_ONE)
@@ -1532,144 +1549,116 @@ function widget:GameFrame(n)
 	windRotation = windRotation + (currentWind * bladeSpeedMultiplier)
 	gameFrame = n
 	
-		-- calculations for the exact metal and energy draw value
+	-- calculations for the exact metal and energy draw value
 
-	local ignore = false
-	if ignore ~= true then
-		for i = 1, 1 do
-			Log(i .."cache")
-			if gameFrame % 2 == 0 then --refresh rate for BP and stalling calculations
-				gameStarted = true
+	Log("cache")
+	-- If we're supposed to draw the buildpower bar, do some calculations.
+	-- Skip frames between calculations _unless_ we have too many builders to do them all in one frame, in which case nowChecking will be positive when the previous frame didn't finish.
+	if drawBPBar and ((gameFrame % 2 == 0) or nowChecking > 0) then
+		gameStarted = true
 
-				local cacheTotalStallingM = 0
-				local cacheTotalStallingE = 0
+		local cacheTotalStallingM = 0
+		local cacheTotalStallingE = 0
 
-				--local totalAvailableBP = 0
-				local cacheTotalReservedBP = 0
-				local cacheTotallyUsedBP = 0
+		--local totalAvailableBP = 0
+		local cacheTotalReservedBP = 0
+		local cacheTotallyUsedBP = 0
 
-				-- How much metal and energy are being pulled by builders, specifically? (As opposed to metal extractors, etc.)
-				local usedBPMetalExpense = 0
-				local usedBPEnergyExpense = 0
-				local buildingBP = 0 -- how much BP is actively building, regardless of how stalled it is?
-				local nonStalledBuildingBP = 0 -- how much BP is actively building and not stalled?
+		-- How much metal and energy are being pulled by builders, specifically? (As opposed to metal extractors, etc.)
+		local usedBPMetalExpense = 0
+		local usedBPEnergyExpense = 0
+		local buildingBP = 0 -- how much BP is actively building, regardless of how stalled it is?
+		local nonStalledBuildingBP = 0 -- how much BP is actively building and not stalled?
 
-				--local nowChecking = 0 -- counter for trackedUnits per frame
-				--Log("." )
-				--Log("." )
-				--Log("trackedNum" ..trackedNum)
-				for unitID, currentUnitBP in pairs(trackedBuilders) do --calculation of exact pull
-					if (nowChecking >= trackPosBase) then -- begin at trackedPos with calcs
-						if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
-							break
-						end
-						if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
-							InitAllUnits()
-						else
-							--Log("nowChecking" ..nowChecking)
-							--totalAvailableBP = totalAvailableBP + currentUnitBP
-							local unitDefID = spGetUnitDefID(unitID)
-							local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-							local _, currentlyUsedM, _, currentlyUsedE = Spring.GetUnitResources(unitID)
-							if foundActivity == true or currentlyUsedM > 0 or currentlyUsedE > 0 then
-								cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
-								local builtUnitID = spGetUnitIsBuilding(unitID)
-								if builtUnitID then
-									usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
-									usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
+		--local nowChecking = 0 -- counter for trackedUnits per frame
+		--Log("." )
+		--Log("." )
+		--Log("trackedNum" ..trackedNum)
+		for unitID, currentUnitBP in pairs(trackedBuilders) do --calculation of exact pull
+			if (nowChecking >= trackPosBase) then -- begin at trackedPos with calcs
+				if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
+					break
+				end
+				if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
+					InitAllUnits()
+				else
+					--Log("nowChecking" ..nowChecking)
+					--totalAvailableBP = totalAvailableBP + currentUnitBP
+					local unitDefID = spGetUnitDefID(unitID)
+					local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
+					local _, currentlyUsedM, _, currentlyUsedE = Spring.GetUnitResources(unitID)
+					if foundActivity == true or currentlyUsedM > 0 or currentlyUsedE > 0 then
+						cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+						local builtUnitID = spGetUnitIsBuilding(unitID)
+						if builtUnitID then
+							usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
+							usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
-									local builtUnitDefID = spGetUnitDefID(builtUnitID)
-									currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-									currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP
-									buildingBP = buildingBP + currentUnitBP
+							local builtUnitDefID = spGetUnitDefID(builtUnitID)
+							currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
+							currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP
+							buildingBP = buildingBP + currentUnitBP
 
-									-- Low-priority units don't have their pulled M/E reported correctly.
-									--if checkPriority(unitID) == "low" then
-									local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
-									local currentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
-									cacheTotalStallingM = cacheTotalStallingM + currentlyWantedM - currentlyUsedM
-									cacheTotalStallingE = cacheTotalStallingE + currentlyWantedE - currentlyUsedE
-									--end
+							local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
+							local currentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
 
-									local nonStalledRateM = 1
-									local nonStalledRateE = 1
-									if currentlyWantedM > 0 then
-										nonStalledRateM = currentlyUsedM / currentlyWantedM
-									end
-									if currentlyWantedE > 0 then
-										nonStalledRateE = currentlyUsedE / currentlyWantedE
-									end
-									nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
+							-- Low-priority units don't have their pulled M/E reported correctly.
+							if checkPriority(unitID) == "low" then
+								cacheTotalStallingM = cacheTotalStallingM + currentlyWantedM - currentlyUsedM
+								cacheTotalStallingE = cacheTotalStallingE + currentlyWantedE - currentlyUsedE
+							end
 
-									if drawBPBar == true then
-										if currentlyUsedBP and currentlyUsedBP > 0 then 				
-											cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
-										end -- until here
-									end
-								end
+							local nonStalledRateM = 1
+							local nonStalledRateE = 1
+							if currentlyWantedM > 0 then
+								nonStalledRateM = currentlyUsedM / currentlyWantedM
+							end
+							if currentlyWantedE > 0 then
+								nonStalledRateE = currentlyUsedE / currentlyWantedE
+							end
+							nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
+
+							if drawBPBar and currentlyUsedBP and currentlyUsedBP > 0 then
+								cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
 							end
 						end
 					end
-					nowChecking = nowChecking + 1
-					--Log("nowChecking new one" ..nowChecking)
-				end
-				cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
-				cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
-				cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
-				cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
-
-
-				local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(myTeamID, "metal")
-				local energy, energyStorage, energyPull, energyIncome, energyExpense, energyShare, energySent = spGetTeamResources(myTeamID, "energy")
-				cacheDataBase['metalExpense'] = metalExpense
-				cacheDataBase['energyExpense'] = energyExpense
-
-				-- How much metal and energy are builders pulling? (This number will drop when they become resource-stalled, perhaps due to being low-priority.)
-				cacheDataBase['usedBPMetalExpense'] = cacheDataBase['usedBPMetalExpense'] + usedBPMetalExpense
-				cacheDataBase['usedBPEnergyExpense'] = cacheDataBase['usedBPEnergyExpense'] + usedBPEnergyExpense
-				cacheDataBase['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled'] + nonStalledBuildingBP
-				cacheDataBase['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall'] + buildingBP
-
-				trackPosBase = trackPosBase + unitsPerFrame
-				--Log("trackPosBase-----------------" ..trackPosBase)
-			end
-		end
-	end
-	local ignore = false
-	if ignore ~= true then
-		for i = 1, 1 do
-			if gameFrame % 2 == 0 and drawBPIndicators == true then
-				Log(i)
-				local totalMetalCostOfBuilders = BP[2]
-				local avgTotalReservedBP = BP[3]
-				local totalAvailableBP = BP[4]
-				local avgTotalUsedBP = BP[5]
-				
-				if BP[2] == nil then
-					totalMetalCostOfBuilders = 1
-				end
-
-				if BP[3] == nil then
-					avgTotalReservedBP = 1
-				end
-				if BP[4] == nil then
-					totalAvailableBP = 1
-				end
-
-				if BP[5] == nil then
-					avgTotalUsedBP = 1
 				end
 			end
+			nowChecking = nowChecking + 1
+			--Log("nowChecking new one" ..nowChecking)
 		end
+		cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
+		cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
+		cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
+		cacheDataBase[7] = cacheDataBase[7] + cacheTotalStallingE
+
+		-- TODO: consider averaging income and expense across all frames for which we calculated builder data.
+		local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(myTeamID, "metal")
+		local energy, energyStorage, energyPull, energyIncome, energyExpense, energyShare, energySent = spGetTeamResources(myTeamID, "energy")
+		cacheDataBase['metalIncome'] = metalIncome
+		cacheDataBase['energyIncome'] = energyIncome
+		cacheDataBase['metalExpense'] = metalExpense
+		cacheDataBase['energyExpense'] = energyExpense
+
+		-- How much metal and energy are builders pulling? (This number will drop when they become resource-stalled, perhaps due to being low-priority.)
+		cacheDataBase['usedBPMetalExpense'] = cacheDataBase['usedBPMetalExpense'] + usedBPMetalExpense
+		cacheDataBase['usedBPEnergyExpense'] = cacheDataBase['usedBPEnergyExpense'] + usedBPEnergyExpense
+		cacheDataBase['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled'] + nonStalledBuildingBP
+		cacheDataBase['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall'] + buildingBP
+
+		trackPosBase = trackPosBase + unitsPerFrame
+		--Log("trackPosBase-----------------" ..trackPosBase)
 	end
 
 	-- If enough frames have passed that we've calculated BP data for all builders, we can present this datapoint to the user.
 	if trackPosBase >= trackedNum then
-		local trackedSamples = 30 -- used to smooth used/reserved BP numbers
 		trackPosBase = 0
 		if drawBPBar then --this section will smooth the values so that factories that finish units won't have too much of an impact
-			BP['instantaneousReservedBP'] = cacheDataBase[3]
-			BP['instantaneousUsedBP'] = cacheDataBase[5]
+			BP['reservedBP_instant'] = cacheDataBase[3]
+			BP['usedBP_instant'] = cacheDataBase[5]
+			BP['metalIncome'] = cacheDataBase['metalIncome']
+			BP['energyIncome'] = cacheDataBase['energyIncome']
 			BP['metalExpense'] = cacheDataBase['metalExpense']
 			BP['energyExpense'] = cacheDataBase['energyExpense']
 			BP['usedBPMetalExpense'] = cacheDataBase['usedBPMetalExpense']
@@ -1677,8 +1666,8 @@ function widget:GameFrame(n)
 			BP['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled']
 			BP['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall']
 
-			avgTotalReservedBP = math.floor(addSampleAndGetWeightedAverage(totalReservedBPData, trackedSamples, BP['instantaneousReservedBP'], 1) + 0.5)
-			avgTotalUsedBP = math.floor(addSampleAndGetWeightedAverage(totalUsedBPData, trackedSamples, BP['instantaneousUsedBP'], 1) + 0.5)
+			BP[3] = math.floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
+			BP[5] = math.floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
 
 			-- Assume our eco supports full BP until we calculate otherwise.
 			-- This assumption only matters if we have no active builders _or_ our builders are
@@ -1690,20 +1679,29 @@ function widget:GameFrame(n)
 
 			-- What if all builders were active and pulled metal and energy in the same proportions as current builders?
 			-- (We can only calculate this if at least one builder is building.)
-			if BP['instantaneousUsedBP'] >= 1 then
+			if BP['usedBP_instant'] >= 1 then
 
 				local totalBP = BP[4]
-				local _, _, _, metalIncome, _, _, _ = spGetTeamResources(myTeamID, "metal")
-				local _, _, _, energyIncome, _, _, _ = spGetTeamResources(myTeamID, "energy")
 
+				local m_per_bp = 0
+				if BP['metalExpensePerBP'] ~= nil then
+					m_per_bp = BP['metalExpensePerBP']
+				end
+				local e_per_bp = 0
+				if BP['energyExpensePerBP'] ~= nil then
+					e_per_bp = BP['energyExpensePerBP']
+				end
 				-- How much metal and energy are we spending _not_ due to builders?
-				local metalExpenseMinusBuilders  = BP['metalExpense'] - BP['usedBPMetalExpense']
-				local energyExpenseMinusBuilders = BP['energyExpense'] - BP['usedBPEnergyExpense']
+				local metalExpenseMinusBuilders_instant  = BP['metalExpense'] - BP['usedBP_instant'] * m_per_bp
+				local energyExpenseMinusBuilders_instant = BP['energyExpense'] - BP['usedBP_instant'] * e_per_bp
+
+				local metalExpenseMinusBuilders = addSampleAndGetWeightedAverage(BP['history_nonBuilderMetalExpense'], metalExpenseMinusBuilders_instant, 1)
+				local energyExpenseMinusBuilders = addSampleAndGetWeightedAverage(BP['history_nonBuilderEnergyExpense'], energyExpenseMinusBuilders_instant, 1)
 				BP['nonBPMetalExpense'] = metalExpenseMinusBuilders
 				BP['nonBPEnergyExpense'] = energyExpenseMinusBuilders
 
-				BP['metalExpensePerBP'] = BP['usedBPMetalExpense'] / BP['instantaneousUsedBP']
-				BP['energyExpensePerBP'] = BP['usedBPEnergyExpense'] / BP['instantaneousUsedBP']
+				BP['metalExpensePerBP'] = BP['usedBPMetalExpense'] / BP['usedBP_instant']
+				BP['energyExpensePerBP'] = BP['usedBPEnergyExpense'] / BP['usedBP_instant']
 				BP['metalExpenseIfAllBPUsed'] = metalExpenseMinusBuilders + BP['metalExpensePerBP'] * totalBP
 				BP['energyExpenseIfAllBPUsed'] = energyExpenseMinusBuilders + BP['energyExpensePerBP'] * totalBP
 
@@ -1712,13 +1710,13 @@ function widget:GameFrame(n)
 				local minSupportedBP = 0
 
 				if BP['metalExpensePerBP'] > 0 then
-					BP['metalSupportedBP'] = (metalIncome - metalExpenseMinusBuilders) / BP['metalExpensePerBP']
+					BP['metalSupportedBP'] = (BP['metalIncome'] - metalExpenseMinusBuilders) / BP['metalExpensePerBP']
 					minSupportedBP = BP['metalSupportedBP']
 					bpRatioSupportedByMIncome = math.max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
 				end
 
 				if BP['energyExpensePerBP'] > 0 then
-					BP['energySupportedBP'] = (energyIncome - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
+					BP['energySupportedBP'] = (BP['energyIncome'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
 					minSupportedBP = BP['energySupportedBP']
 					bpRatioSupportedByEIncome = math.max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
 				end
@@ -1735,15 +1733,15 @@ function widget:GameFrame(n)
 				end
 			end
 
-			-- Weighted average of slider positions. If weight (totallyUsedBP) is 0 the table won't be altered at all.
-			BP['mSliderPosition'] = addSampleAndGetWeightedAverage(BP['mSliderPositions'], trackedSamples, bpRatioSupportedByMIncome, BP['instantaneousUsedBP'])
-			BP['eSliderPosition'] = addSampleAndGetWeightedAverage(BP['eSliderPositions'], trackedSamples, bpRatioSupportedByEIncome, BP['instantaneousUsedBP'])
+			-- Weighted average of slider positions. If weight (BP['usedBP_instant']) is 0 the table won't be altered at all.
+			BP['mSliderPosition'] = addSampleAndGetWeightedAverage(BP['history_mSliderPosition'], bpRatioSupportedByMIncome, BP['usedBP_instant'])
+			BP['eSliderPosition'] = addSampleAndGetWeightedAverage(BP['history_eSliderPosition'], bpRatioSupportedByEIncome, BP['usedBP_instant'])
 
-			BP[3] = avgTotalReservedBP
-			BP[5] = avgTotalUsedBP
 			updateResbar('BP')
 			cacheDataBase[3] = 0
 			cacheDataBase[5] = 0
+			cacheDataBase['metalIncome'] = 0
+			cacheDataBase['energyIncome'] = 0
 			cacheDataBase['metalExpense'] = 0
 			cacheDataBase['energyExpense'] = 0
 			cacheDataBase['usedBPMetalExpense'] = 0
@@ -1762,17 +1760,21 @@ function widget:GameFrame(n)
 	Log("GameFrame(n)")
 end
 
-function addSampleAndGetWeightedAverage(t, maxSamples, newSample, newWeight)
+-- Assumes the history table is of the form { numSamples, { {s0, w0}, {s1, w1} ... } }
+-- where s0 and s1 are sample values and w0 and w1 are their weights.
+function addSampleAndGetWeightedAverage(history, newSample, newWeight)
+	numSamples = history[1]
+	samples = history[2]
 	if newSample ~= nil then
-		table.insert(t, { newSample, newWeight })
-		if #t > maxSamples then
-			table.remove(t, 1)
+		table.insert(samples, { newSample, newWeight })
+		if #samples > numSamples then
+			table.remove(samples, 1)
 		end
 	end
 
 	local sampleWeightedSum = 0
 	local weightSum = 0
-	for _, sw in ipairs(t) do
+	for _, sw in ipairs(samples) do
 		sampleWeightedSum = sampleWeightedSum + sw[1] * sw[2]
 		weightSum = weightSum + sw[2]
 	end
