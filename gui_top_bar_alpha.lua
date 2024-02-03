@@ -29,6 +29,10 @@ local includeFactories = true
 local proMode = false
 local drawBPBar = true
 
+-- Buildpower bar: behavior tweaks to consider making permanent _or_ options
+local includeConsBeingBuilt = true -- should we count cons being built? If so, their BP will be considered reserved.
+local countStalledAsIdle = false -- should we consider stalled BP to be idle? If not, it'll be considered used.
+
 -- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
 local drawBPIndicators = true
 local drawBPWindRangeIndicators = false
@@ -1228,13 +1232,24 @@ local function updateResbar(res)  --decides where and what is drawn
 			local totalAvailableBP = BP[4]
 			local avgTotalUsedBP = math.round(BP[5])
 
+			local reservedDesc = "(Reserved: in-use, walking to a job, or stalled.)"
+			local idleDesc = " idle BP (red)."
+			if includeConsBeingBuilt and countStalledAsIdle then
+				reservedDesc = "(Reserved: being built, in-use, or walking to a job.)"
+				idleDesc = " idle BP (red), including stalled BP."
+			elseif includeConsBeingBuilt then
+				reservedDesc = "(Reserved: being built, in-use, walking to a job, or stalled.)"
+			elseif countStalledAsIdle then
+				idleDesc = " idle BP (red), including stalled BP."
+			end
+
 			--WG['tooltip'].RemoveTooltip(res .. '_all')
 			local bpTooltipTitle = "Buildpower"
 			local bpTooltipText = textColor .. "You have a total of " .. highlightColor .. totalAvailableBP .. textColor .. " buildpower (BP).\n"
 				.. textColor .. "You are using " .. highlightColor .. avgTotalUsedBP .. textColor .. " BP (green), "
 				.. textColor .. "with " .. highlightColor .. avgTotalReservedBP .. textColor .. " reserved (dark green).\n"
-				.. textColor .. "(Reserved: in-use, walking to a structure, or stalled.)\n\n"
-				.. textColor .. "You have " .. highlightColor .. (totalAvailableBP - avgTotalReservedBP) .. textColor .." idle BP (red)."
+				.. textColor .. reservedDesc .. "\n\n"
+				.. textColor .. "You have " .. highlightColor .. (totalAvailableBP - avgTotalReservedBP) .. textColor .. idleDesc
 
 			if drawBPIndicators and BP['mSliderPosition'] ~= nil and BP['eSliderPosition'] ~= nil then
 				bpTooltipText = bpTooltipText .. "\n\n"
@@ -1612,13 +1627,18 @@ function widget:GameFrame(n)
 		--Log("." )
 		--Log("." )
 		--Log("trackedNum" ..trackedNum)
-		for unitID, currentUnitBP in pairs(trackedBuilders) do --calculation of exact pull
-			if (nowChecking >= trackPosBase) then -- begin at trackedPos with calcs
+		for unitID, unitData in pairs(trackedBuilders) do --calculation of exact pull
+			if nowChecking >= trackPosBase then -- begin at trackedPos with calcs
+				currentUnitBP = unitData[1]
+				unitIsBuilt = unitData[2]
 				if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
 					break
 				end
 				if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
 					InitAllUnits()
+				elseif not unitIsBuilt then
+					-- Units still being built count as reserved.
+					cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
 				else
 					--Log("nowChecking" ..nowChecking)
 					--totalAvailableBP = totalAvailableBP + currentUnitBP
@@ -1626,7 +1646,7 @@ function widget:GameFrame(n)
 					local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
 					local _, currentlyUsedM, _, currentlyUsedE = Spring.GetUnitResources(unitID)
 					if foundActivity == true or currentlyUsedM > 0 or currentlyUsedE > 0 then
-						cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+						local unitReservedBP = currentUnitBP
 						local builtUnitID = spGetUnitIsBuilding(unitID)
 						if builtUnitID then
 							usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
@@ -1656,10 +1676,16 @@ function widget:GameFrame(n)
 							end
 							nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
 
-							if drawBPBar and currentlyUsedBP and currentlyUsedBP > 0 then
+							if currentlyUsedBP and currentlyUsedBP > 0 then
 								cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
+
+								-- This unit is building but might be stalled. Only count as reserved its BP which aren't stalled.
+								if countStalledAsIdle then
+									unitReservedBP = currentlyUsedBP
+								end
 							end
 						end
+						cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
 					end
 				end
 			end
@@ -2766,6 +2792,7 @@ function widget:PlayerChanged()
 end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam)
+	TrackUnit(unitID, unitDefID, unitTeam, false)
 	if not isCommander[unitDefID] then
 		return
 	end
@@ -2783,11 +2810,11 @@ function widget:UnitTaken(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitGiven(unitID, unitDefID, unitTeam)
-    TrackUnit(unitID, unitDefID, unitTeam)
+    TrackUnit(unitID, unitDefID, unitTeam, true)
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-    TrackUnit(unitID, unitDefID, unitTeam)
+    TrackUnit(unitID, unitDefID, unitTeam, true)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
@@ -2990,7 +3017,14 @@ function pid(Kp, Ki, Kd, dt, prevIntegral, prevError, setPoint, measuredValue)
     return output, integral, error
 end
 
-function TrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
+function TrackUnit(unitID, unitDefID, unitTeam, isBuilt) -- needed for exact calculations
+	if isBuilt == nil then
+		local health, maxHealth, paralyzeDamage, capture, build = Spring.GetUnitHealth(unitID)
+		isBuilt = build >= 1
+	end
+	if (not includeConsBeingBuilt) and (not isBuilt) then
+		return
+	end
 	local unitDef = UnitDefs[unitDefID]
 	if (myTeamID == unitTeam) and unitDef then
 		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
@@ -3006,11 +3040,15 @@ function TrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
 				if unitName == "armcom" or unitName == "corcom" then
 					currentUnitMetalCost = metalCostForCommander
 				end
-				BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-				trackedBuilders[unitID] = unitDef.buildSpeed
-				BP[4] = BP[4] + trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
+
+				-- We may have already tracked this unit when it started being built
+				if not trackedBuilders[unitID] then
+					BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
+					trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt }
+					BP[4] = BP[4] + trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
+				end
 			end
-		elseif unitDef.name == "armwin" or unitDef.name == "corwin" then -- wind generator
+		elseif isBuilt and (unitDef.name == "armwin" or unitDef.name == "corwin") then -- wind generator
 			trackedWinds[unitID] = 1
 			numWindGenerators = numWindGenerators + 1
 		end
@@ -3034,8 +3072,8 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
 					currentUnitMetalCost = metalCostForCommander
 				end
 				BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-				trackedBuilders[unitID] = unitDef.buildSpeed
-				BP[4] = BP[4] - trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
+				trackedBuilders[unitID] = { unitDef.buildSpeed, true } -- assume this unit is built
+				BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
 			end
 		end
 	end
