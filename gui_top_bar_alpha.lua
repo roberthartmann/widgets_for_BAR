@@ -31,6 +31,7 @@ local drawBPBar = true
 
 -- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
 local drawBPIndicators = true
+local drawBPWindRangeIndicators = false
 
 -- stores the date that is used for the res calc and BP bar
 local BP = {0, 0, 0.1, 0, 0, 1, 1}
@@ -44,12 +45,17 @@ BP['metalExpense'] = 0
 BP['energyExpense'] = 0
 
 -- Lists of recent datapoints, used for smoothing. The first element is the number of datapoints to keep, the second is the datapoints themselves.
-BP['history_usedBP'] = { 30, {} } -- used to calculate the avarage used BP
-BP['history_reservedBP'] = { 30, {} } -- used to calculate the avarage reserved BP
+BP['history_usedBP'] = { 30, {} } -- used to calculate the average used BP
+BP['history_reservedBP'] = { 30, {} } -- used to calculate the average reserved BP
 BP['history_nonBuilderMetalExpense'] = { 100, {} } -- average metal expense from non-builders
 BP['history_nonBuilderEnergyExpense'] = { 100, {} } -- average energy expense from non-builders
 BP['history_mSliderPosition'] = { 30, {} } -- average metal expense from non-builders
-BP['history_eSliderPosition'] = { 30, {} } -- average energy expense from non-builders
+
+-- How much of our buildpower can be supported by our energy income, expressed as a ratio from 0 to 1?
+BP['history_eSliderPosition'] = { 30, {} }
+BP['history_eSliderPosition_minWind'] = { 30, {} } -- if wind is at its minimum?
+BP['history_eSliderPosition_maxWind'] = { 30, {} } -- if wind is at its maximum?
+BP['history_eIncomeNoWind'] = { 30, {} } -- how much energy income is from non-wind sources?
 
 BP['reservedBP_instant'] = 0
 BP['usedBP_instant'] = 0
@@ -67,7 +73,11 @@ cacheDataBase['metalIncome'] = 0
 cacheDataBase['energyIncome'] = 0
 cacheDataBase['metalExpense'] = 0
 cacheDataBase['energyExpense'] = 0
-local trackedBuilders = {} -- stores units of the player and theit BP
+local trackedBuilders = {} -- stores units of the player and their BP
+
+-- Keep track of wind generators
+local trackedWinds = {}
+local numWindGenerators = 0
 
 local spSetUnitBuildSpeed = Spring.SetUnitBuildSpeed
 local spGetUnitIsBuilding = Spring.GetUnitIsBuilding
@@ -1135,6 +1145,20 @@ local function updateResbar(res)  --decides where and what is drawn
 					end
 
 					-- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
+					if drawBPWindRangeIndicators and BP['eSliderPosition_minWind'] ~= nil and BP['eSliderPosition_maxWind'] ~= nil then
+						-- Draw a thing rectangle showing the possible positions of the E-supported BP slider based on min and max wind conditions.
+						RectRound(
+							barArea[1] + (BP['eSliderPosition_minWind'] * barWidth) - energyIndicatorHalfWidth, -- left
+							barArea[4] + barIntrusion, -- top of the bar, plus an intrusion upward
+							barArea[1] + (BP['eSliderPosition_maxWind'] * barWidth) + energyIndicatorHalfWidth, -- right
+							barArea[4] - barIntrusion + indicatorH, -- to the top of the E indicator assuming no multiplier
+							(indicatorH * 1 - 2 * barIntrusion) / 2, -- corner size
+							0, 0, 0, 0, -- don't round any corners
+							{ 0.8, 0.8, 0.0, 1 }, -- lowlight color (RGBA)
+							{ 0.4, 0.4, 0.0, 1 }) -- highlight color (RGBA)
+					end
+
+					-- Indicator for the range of buildpower that energy COULD support if the wind changes.
 					if indicatorPosE ~= nil then
 						RectRound(
 							barArea[1] + (indicatorPosE * barWidth) - energyIndicatorHalfWidth, -- left
@@ -1216,6 +1240,11 @@ local function updateResbar(res)  --decides where and what is drawn
 			end
 
 			if proMode then
+				local eIncomeNoWind = BP['energyIncomeNoWind']
+				if eIncomeNoWind == nil then
+					eIncomeNoWind = 0
+				end
+
 				bpTooltipText = bpTooltipText
 				    .. "\n\nDEBUG:"
 				    .. float_to_s(avgTotalUsedBP) .. " BP used (smoothed), " .. float_to_s(BP['usedBPIfNoStall']) .. " if no stall \n"
@@ -1228,7 +1257,10 @@ local function updateResbar(res)  --decides where and what is drawn
 					.. float_to_s(BP['nonBPEnergyExpense']) .. " E spent by non-builders, \n"
 					.. float_to_s(BP['metalExpense']) .. " / " .. float_to_s(BP['energyExpense']) .. " metal/energy expense, \n"
 					.. float_to_s(BP['metalExpensePerBP']) .. " / " .. float_to_s(BP['energyExpensePerBP']) .. " M/E expense per BP, \n"
+					.. float_to_s(BP['energyIncome']) .." E income\n"
+					.. float_to_s(numWindGenerators) .." wind generators\n"
 					.. "\nprojections:\n"
+					.. float_to_s(eIncomeNoWind) .." E income without wind\n"
 					.. float_to_s(BP['metalExpenseIfAllBPUsed']) .. " M spent if all BP is used, \n"
 					.. float_to_s(BP['energyExpenseIfAllBPUsed']) .. " E spent if all BP is used, \n"
 					.. float_to_s(BP['metalSupportedBP']) .. " BP supported by M income, \n"
@@ -1647,6 +1679,18 @@ function widget:GameFrame(n)
 		cacheDataBase['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled'] + nonStalledBuildingBP
 		cacheDataBase['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall'] + buildingBP
 
+		if drawBPWindRangeIndicators then
+			local realWindStrength = 0
+			for unitID in pairs(trackedWinds) do
+				local metalMake, metalUse, energyMake, energyUse = Spring.GetUnitResources(unitID)
+				if energyMake ~= nil then
+					realWindStrength = energyMake
+					break
+				end
+			end
+			cacheDataBase['realWindStrength'] = realWindStrength
+		end
+
 		trackPosBase = trackPosBase + unitsPerFrame
 		--Log("trackPosBase-----------------" ..trackPosBase)
 	end
@@ -1659,6 +1703,7 @@ function widget:GameFrame(n)
 			BP['usedBP_instant'] = cacheDataBase[5]
 			BP['metalIncome'] = cacheDataBase['metalIncome']
 			BP['energyIncome'] = cacheDataBase['energyIncome']
+			BP['realWindStrength_instant'] = cacheDataBase['realWindStrength']
 			BP['metalExpense'] = cacheDataBase['metalExpense']
 			BP['energyExpense'] = cacheDataBase['energyExpense']
 			BP['usedBPMetalExpense'] = cacheDataBase['usedBPMetalExpense']
@@ -1668,6 +1713,11 @@ function widget:GameFrame(n)
 
 			BP[3] = math.floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
 			BP[5] = math.floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
+
+			if drawBPWindRangeIndicators then
+				BP['realWindStrength_instant'] = cacheDataBase['realWindStrength']
+				BP['energyIncomeNoWind'] = addSampleAndGetWeightedAverage(BP['history_eIncomeNoWind'], BP['energyIncome'] - numWindGenerators * BP['realWindStrength_instant'], 1)
+			end
 
 			-- Assume our eco supports full BP until we calculate otherwise.
 			-- This assumption only matters if we have no active builders _or_ our builders are
@@ -1695,6 +1745,9 @@ function widget:GameFrame(n)
 				local metalExpenseMinusBuilders_instant  = BP['metalExpense'] - BP['usedBP_instant'] * m_per_bp
 				local energyExpenseMinusBuilders_instant = BP['energyExpense'] - BP['usedBP_instant'] * e_per_bp
 
+				-- TODO: How to handle metal-makers? They're a non-builder energy expense that will be turned off before we actually E-stall.
+				-- We should consider a range of metal-supported BP just like we do for wind energy.
+
 				local metalExpenseMinusBuilders = addSampleAndGetWeightedAverage(BP['history_nonBuilderMetalExpense'], metalExpenseMinusBuilders_instant, 1)
 				local energyExpenseMinusBuilders = addSampleAndGetWeightedAverage(BP['history_nonBuilderEnergyExpense'], energyExpenseMinusBuilders_instant, 1)
 				BP['nonBPMetalExpense'] = metalExpenseMinusBuilders
@@ -1719,6 +1772,18 @@ function widget:GameFrame(n)
 					BP['energySupportedBP'] = (BP['energyIncome'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
 					minSupportedBP = BP['energySupportedBP']
 					bpRatioSupportedByEIncome = math.max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
+
+					if drawBPWindRangeIndicators then
+						eSupportedBP_minWind = (BP['energyIncomeNoWind'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
+						local bpRatioSupportedByEIncome_minWind = math.max(0, math_min(eSupportedBP_minWind / totalBP, 1))
+
+						maxEPerWindGenerator = math.min(25, Game.windMax)
+						eSupportedBP_maxWind = (BP['energyIncomeNoWind'] + numWindGenerators * maxEPerWindGenerator - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
+						local bpRatioSupportedByEIncome_maxWind = math.max(0, math_min(eSupportedBP_maxWind / totalBP, 1))
+
+						BP['eSliderPosition_minWind'] = addSampleAndGetWeightedAverage(BP['history_eSliderPosition_minWind'], bpRatioSupportedByEIncome_minWind, BP['usedBP_instant'])
+						BP['eSliderPosition_maxWind'] = addSampleAndGetWeightedAverage(BP['history_eSliderPosition_maxWind'], bpRatioSupportedByEIncome_maxWind, BP['usedBP_instant'])
+					end
 				end
 
 				if BP['metalSupportedBP'] ~= nil or BP['energySupportedBP'] ~= nil then
@@ -1744,6 +1809,7 @@ function widget:GameFrame(n)
 			cacheDataBase['energyIncome'] = 0
 			cacheDataBase['metalExpense'] = 0
 			cacheDataBase['energyExpense'] = 0
+			cacheDataBase['realWindStrength'] = 0
 			cacheDataBase['usedBPMetalExpense'] = 0
 			cacheDataBase['usedBPEnergyExpense'] = 0
 			cacheDataBase['usedBPExceptStalled'] = 0
@@ -2708,19 +2774,19 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitTaken(unitID, unitDefID, unitTeam)
-	UntrackBuilder(unitID)
+	UntrackUnit(unitID)
 end
 
 function widget:UnitGiven(unitID, unitDefID, unitTeam)
-    TrackBuilder(unitID, unitDefID, unitTeam)
+    TrackUnit(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-    TrackBuilder(unitID, unitDefID, unitTeam)
+    TrackUnit(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-	UntrackBuilder(unitID)	
+	UntrackUnit(unitID)
 	if not isCommander[unitDefID] then
 		return
 	end
@@ -2919,10 +2985,10 @@ function pid(Kp, Ki, Kd, dt, prevIntegral, prevError, setPoint, measuredValue)
     return output, integral, error
 end
 
-function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculations
+function TrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
 	local unitDef = UnitDefs[unitDefID]
-	if (myTeamID == unitTeam) then
-		if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+	if (myTeamID == unitTeam) and unitDef then
+		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
 			-- is factory is needed for bp bar only (switch metal cost on/off)
 			if unitDef.isFactory == false or includeFactories then
 				trackedNum = trackedNum + 1
@@ -2939,14 +3005,17 @@ function TrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculati
 				trackedBuilders[unitID] = unitDef.buildSpeed
 				BP[4] = BP[4] + trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
 			end
+		elseif unitDef.name == "armwin" or unitDef.name == "corwin" then -- wind generator
+			trackedWinds[unitID] = 1
+			numWindGenerators = numWindGenerators + 1
 		end
 	end
 end
 
-function UntrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calculations
+function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
 	local unitDef = UnitDefs[unitDefID]
-	if (myTeamID == unitTeam) then
-		if unitDef and unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+	if (myTeamID == unitTeam) and unitDef then
+		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
 			-- is factory is needed for bp bar only (switch metal cost on/off)
 			if unitDef.isFactory == false or includeFactories then
 				trackedNum = trackedNum - 1
@@ -2964,6 +3033,10 @@ function UntrackBuilder(unitID, unitDefID, unitTeam) -- needed for exact calcula
 				BP[4] = BP[4] - trackedBuilders[unitID] -- BP[4] ^= totalAvailableBP
 			end
 		end
+	end
+	if trackedWinds[unitID] then
+		table.remove(trackedWinds, unitID)
+		numWindGenerators = numWindGenerators - 1
 	end
 end
 --function removeBuildUnitFromBP(unitID)
@@ -2988,10 +3061,12 @@ function InitAllUnits()
 	BP[2] = 0
 	BP[4] = 0
 	trackedNum = 0
-	trackedBuilders = nil
     trackedBuilders = {}
+    trackedWinds = {}
+    numWindGenerators = 0
+
 	for _, unitID in pairs(Spring.GetTeamUnits(myTeamID)) do  -- needed for exact calculations
-		TrackBuilder(unitID, Spring.GetUnitDefID(unitID), myTeamID)
+		TrackUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
 	end
 end
 
