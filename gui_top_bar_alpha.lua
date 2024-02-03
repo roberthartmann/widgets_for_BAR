@@ -94,7 +94,7 @@ local CMD_PRIORITY = 34571 --low prio builders
 
 local allowSavegame = true--Spring.Utilities.ShowDevUI()
 
-local ui_scale = 0.85 tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1) -- xxx 
+local ui_scale = tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
 
 local fontfile = "fonts/" .. Spring.GetConfigString("bar_font", "Poppins-Regular.otf")
 local fontfile2 = "fonts/" .. Spring.GetConfigString("bar_font2", "Exo2-SemiBold.otf")
@@ -108,12 +108,7 @@ local height = orgHeight * (1 + (ui_scale - 1) / 1.7)
 
 local escapeKeyPressesQuit = false
 
-local relXpos = 0.3 
-if drawBPBar == true then
-   relXpos = 0.3
-end
-
-
+local relXpos = 0.3
 local borderPadding = 5
 local bladeSpeedMultiplier = 0.2
 
@@ -131,7 +126,10 @@ local barGlowCenterTexture = ":l:LuaUI/Images/barglow-center.png"
 local barGlowEdgeTexture = ":l:LuaUI/Images/barglow-edge.png"
 local bladesTexture = ":n:LuaUI/Images/wind-blades.png"
 local wavesTexture = ":n:LuaUI/Images/tidal-waves.png"
-local comTexture = ":n:Icons/corcom.png"		-- will be changed later to unit icon depending on faction
+local comTexture = ":n:Icons/corcom.png"
+if UnitDefs[Spring.GetTeamRulesParam(Spring.GetMyTeamID(), 'startUnit')] then
+	comTexture = ':n:Icons/'..UnitDefs[Spring.GetTeamRulesParam(Spring.GetMyTeamID(), 'startUnit')].name..'.png'
+end
 
 local math_ceil = math.ceil
 local math_floor = math.floor
@@ -178,8 +176,6 @@ local spec = spGetSpectatingState()
 local myAllyTeamID = Spring.GetMyAllyTeamID()
 local myTeamID = Spring.GetMyTeamID()
 local myPlayerID = Spring.GetMyPlayerID()
-
-comTexture = ':n:Icons/'..UnitDefs[Spring.GetTeamRulesParam(myTeamID, 'startUnit')].name..'.png'
 
 local myAllyTeamList = Spring.GetTeamList(myAllyTeamID)
 local numTeamsInAllyTeam = #myAllyTeamList
@@ -242,8 +238,7 @@ if riskWindValue == nil then
 		riskWindValue = "100"
 	end
 end
-
-local tidalSpeed = Game.tidal
+local tidalSpeed = Spring.GetTidal() -- for now assumed that it is not dynamiccally changed
 local tidalWaveAnimationHeight = 10
 local windRotation = 0
 
@@ -263,9 +258,7 @@ local dlistResValues = { metal = {}, energy = {}, BP = {} }
 local currentResValue = { metal = 1000, energy = 1000, BP = 0 }
 local currentStorageValue = { metal = -1, energy = -1, BP = 0.1 }
 
-
 local r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy'), }}
-
 
 local showOverflowTooltip = {}
 
@@ -309,7 +302,6 @@ local overflowingMetal = false
 local overflowingEnergy = false
 local playerStallingMetal = false
 local playerStallingEnergy = false
-
 
 local isCommander = {}
 for unitDefID, unitDef in pairs(UnitDefs) do
@@ -502,6 +494,7 @@ local function updateComs(forceText)
 	dlistComsGuishader = glCreateList(function()
 		RectRound(area[1], area[2], area[3], area[4], 5.5 * widgetScale, 0, 0, 1, 1)
 	end)
+
 	if dlistComs1 ~= nil then
 		glDeleteList(dlistComs1)
 	end
@@ -611,7 +604,19 @@ end
 
 -- return true if tidal speed is * relevant * , enough water in the world (>= 10%)
 local function checkTidalRelevant()
-	local _, _, mapMinHeight, mapMaxHeight = Spring.GetGroundExtremes()
+	local mapMinHeight = 0
+	-- account for invertmap to the best of our abiltiy
+	if string.find(Spring.GetModOptions().debugcommands,"invertmap") then
+		if string.find(Spring.GetModOptions().debugcommands,"wet") then
+			-- assume that they want water if keyword "wet" is involved, too violitile between initilization and subsequent post terraform checks
+			return true
+		--else
+		--	mapMinHeight = 0
+		end
+	else
+		mapMinHeight = select(3,Spring.GetGroundExtremes())
+	end
+	mapMinHeight = mapMinHeight - (Spring.GetModOptions().map_waterlevel or 0)
 	return mapMinHeight <= -20	-- armtide/cortide can be built from 20 waterdepth (hardcoded here cause am too lazy to auto cycle trhough unitdefs and read it from there)
 end
 
@@ -848,54 +853,55 @@ local function updateResbarText(res)
 								end
 							end
 						end
-
 						local fontSize = (orgHeight * (1 + (ui_scale - 1) / 1.33) / 4) * widgetScale
 						local textWidth = font2:GetTextWidth(text) * fontSize
+
 						-- background
-						local color1, color2, color3, color4, color5, color6
-						if res == 'metal' then
-							if allyteamOverflowingMetal then
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
+						local color1, color2
+						if res == 'metal' or res == 'energy' then
+							if res == 'metal' then
+								if allyteamOverflowingMetal then
+									color1 = { 0.35, 0.1, 0.1, 1 }
+									color2 = { 0.25, 0.05, 0.05, 1 }
+								else
+									color1 = { 0.35, 0.35, 0.35, 1 }
+									color2 = { 0.25, 0.25, 0.25, 1 }
+								end
 							else
-								color1 = { 0.35, 0.35, 0.35, 1 }
-								color2 = { 0.25, 0.25, 0.25, 1 }
+								if allyteamOverflowingEnergy then
+									color1 = { 0.35, 0.1, 0.1, 1 }
+									color2 = { 0.25, 0.05, 0.05, 1 }
+								else
+									color1 = { 0.35, 0.25, 0, 1 }
+									color2 = { 0.25, 0.16, 0, 1 }
+								end
 							end
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] , resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-						elseif res == 'energy' then
-							if allyteamOverflowingEnergy then
-								color1 = { 0.35, 0.1, 0.1, 1 }
-								color2 = { 0.25, 0.05, 0.05, 1 }
+							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][4] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][4], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+							if res == 'metal' then
+								if allyteamOverflowingMetal then
+									color1 = { 1, 0.3, 0.3, 0.25 }
+									color2 = { 1, 0.3, 0.3, 0.44 }
+								else
+									color1 = { 1, 1, 1, 0.25 }
+									color2 = { 1, 1, 1, 0.44 }
+								end
 							else
-								color1 = { 0.35, 0.25, 0, 1 }
-								color2 = { 0.25, 0.16, 0, 1 }
+								if allyteamOverflowingEnergy then
+									color1 = { 1, 0.3, 0.3, 0.25 }
+									color2 = { 1, 0.3, 0.3, 0.44 }
+								else
+									color1 = { 1, 0.88, 0, 0.25 }
+									color2 = { 1, 0.88, 0, 0.44 }
+								end
 							end
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3] , resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+							RectRound(resbarArea[res][3] - textWidth + bgpadding2, resbarArea[res][4] - 15.5 * widgetScale + bgpadding2, resbarArea[res][3] - bgpadding2, resbarArea[res][4], 2.8 * widgetScale, 0, 0, 1, 1, color1, color2)
 						end
-						if res == 'metal' then
-							if allyteamOverflowingMetal then
-								color1 = { 1, 0.3, 0.3, 0.25 }
-								color2 = { 1, 0.3, 0.3, 0.44 }
-							else
-								color1 = { 1, 1, 1, 0.25 }
-								color2 = { 1, 1, 1, 0.44 }
-							end
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-						elseif res == 'energy' then
-							if allyteamOverflowingEnergy then
-								color1 = { 1, 0.3, 0.3, 0.25 }
-								color2 = { 1, 0.3, 0.3, 0.44 }
-							else
-								color1 = { 1, 0.88, 0, 0.25 }
-								color2 = { 1, 0.88, 0, 0.44 }
-							end
-							RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
-						end
+
 						font2:Begin()
 						font2:SetTextColor(1, 0.88, 0.88, 1)
 						font2:SetOutlineColor(0.2, 0, 0, 0.6)
 						if res ~= 'BP' then
-							font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
+							font2:Print(text, resbarArea[res][3], resbarArea[res][4] - 9.3 * widgetScale, fontSize, 'or')
 						elseif drawBPBar then
 							local offset = 0
 
@@ -904,23 +910,23 @@ local function updateResbarText(res)
 							local info_lowlight = { 0.20, 0.20, 0.20, 1 }
 							local info_highlight = { 0.12, 0.12, 0.12, 1 }
 							if notifyMetalStall then
-								offset = showBuildpowerAlert(resbarArea[res], 'Need metal', fontSize, warning_lowlight, warning_highlight, offset)
+								offset = showBuildpowerAlert(resbarArea[res], 'Need metal', fontSize, warning_lowlight, warning_highlight, offset, bgpadding2)
 							end
 
 							if notifyEnergyStall then
-								offset = showBuildpowerAlert(resbarArea[res], 'Need energy', fontSize, warning_lowlight, warning_highlight, offset)
+								offset = showBuildpowerAlert(resbarArea[res], 'Need energy', fontSize, warning_lowlight, warning_highlight, offset, bgpadding2)
 							end
 
 							if notifyBPSurplus then
-								offset = showBuildpowerAlert(resbarArea[res], 'Too much buildpower', fontSize, info_lowlight, info_highlight, offset)
+								offset = showBuildpowerAlert(resbarArea[res], 'Too much buildpower', fontSize, info_lowlight, info_highlight, offset, bgpadding2)
 							end
 
 							if notifyBPDeficit then
-								offset = showBuildpowerAlert(resbarArea[res], 'Need buildpower', fontSize, info_lowlight, info_highlight, offset)
+								offset = showBuildpowerAlert(resbarArea[res], 'Need buildpower', fontSize, info_lowlight, info_highlight, offset, bgpadding2)
 							end
 
 							if notifyBPIdle then
-								offset = showBuildpowerAlert(resbarArea[res], 'Idle buildpower', fontSize, info_lowlight, info_highlight, offset)
+								offset = showBuildpowerAlert(resbarArea[res], 'Idle buildpower', fontSize, info_lowlight, info_highlight, offset, bgpadding2)
 							end
 						end
 
@@ -934,12 +940,12 @@ local function updateResbarText(res)
 	end
 end
 
-function showBuildpowerAlert(resourceArea, text, fontSize, lowlightColor, highlightColor, offset)
+function showBuildpowerAlert(resourceArea, text, fontSize, lowlightColor, highlightColor, offset, padding)
 	text = '   ' .. text .. '   '
 	local textWidth = font2:GetTextWidth(text) * fontSize
 	-- The gradient has the lowlight color at the bottom and the highlight color at the top.
-	RectRound(resourceArea[3] - (offset + textWidth), resourceArea[2] - 15.5 * widgetScale, resourceArea[3] - offset, resourceArea[2], 3.7 * widgetScale, 0, 0, 1, 1, lowlightColor, highlightColor)
-	font2:Print(text, resourceArea[3] - offset, resourceArea[2] - 9.3 * widgetScale , fontSize, 'or')
+	RectRound(resourceArea[3] - (offset + textWidth) + padding, resourceArea[4] - 15.5 * widgetScale + padding, resourceArea[3] - offset - padding, resourceArea[4], 2.8 * widgetScale, 0, 0, 1, 1, lowlightColor, highlightColor)
+	font2:Print(text, resourceArea[3] - offset, resourceArea[4] - 9.3 * widgetScale , fontSize, 'or')
 	return offset + textWidth
 end
 
@@ -962,11 +968,12 @@ local function updateResbar(res)  --decides where and what is drawn
 	local barWidth = barArea[3] - barArea[1]
 	local glowSize = barHeight * 7
 	local edgeWidth = math.max(1, math_floor(vsy / 1100))
+
 	if not showQuitscreen and resbarHover ~= nil and resbarHover == res then
 		sliderHeightAdd = barHeight / 0.75
 		shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
 	end
-	shareSliderWidth = math_ceil(shareSliderWidth)
+	shareSliderWidth = math.ceil(shareSliderWidth)
 
 	if res == 'metal' then
 		resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
@@ -976,6 +983,7 @@ local function updateResbar(res)  --decides where and what is drawn
 		resbarDrawinfo[res].barColor = { 0, 1, 0, 1 }
 	end
 	resbarDrawinfo[res].barArea = barArea
+
 	resbarDrawinfo[res].barTexRect = { barArea[1], barArea[2], barArea[1] + ((r[res][1] / r[res][2]) * barWidth), barArea[4] }
 	resbarDrawinfo[res].barGlowMiddleTexRect = { resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[3], resbarDrawinfo[res].barTexRect[4] + glowSize }
 	resbarDrawinfo[res].barGlowLeftTexRect = { resbarDrawinfo[res].barTexRect[1] - (glowSize * 2.5), resbarDrawinfo[res].barTexRect[2] - glowSize, resbarDrawinfo[res].barTexRect[1], resbarDrawinfo[res].barTexRect[4] + glowSize }
@@ -1016,11 +1024,7 @@ local function updateResbar(res)  --decides where and what is drawn
 	end
 	dlistResbar[res][0] = glCreateList(function()
 		RectRound(area[1], area[2], area[3], area[4], 5.5 * widgetScale, 0, 0, 1, 1)
-
 	end)
-
-
-
 
 	dlistResbar[res][1] = glCreateList(function()
 		UiElement(area[1], area[2], area[3], area[4], 0, 0, 1, 1)
@@ -1448,6 +1452,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 end
 
 function init()
+
 	r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') } }
 	if drawBPBar == true then
 		r['BP'] = BP
@@ -1457,15 +1462,14 @@ function init()
 
 	local filledWidth = 0
 	local totalWidth = topbarArea[3] - topbarArea[1]
-
-	-- metal
-
 	local width = math_floor(totalWidth / 4.4)
-	local bpWidth = proMode and math_floor(totalWidth / 6) or math_floor(totalWidth / 12)
+	local bpWidth = (proMode and math_floor(totalWidth / 6)) or math_floor(totalWidth / 12)
 	if drawBPBar then
 		-- If we allocate totalWidth / 2 for M/E/BP bars, give M/E bars whatever's left after BP.
 		width = math_floor((totalWidth / 2 - bpWidth) / 2)
 	end
+
+	-- metal
 	resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar('metal')
@@ -1474,6 +1478,8 @@ function init()
 	resbarArea['energy'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar('energy')
+
+	-- buildpower
 	if drawBPBar then
 		resbarArea['BP'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + bpWidth, topbarArea[4] }
 		filledWidth = filledWidth + bpWidth + widgetSpaceMargin
@@ -1521,7 +1527,7 @@ function init()
 
 	updateResbarText('metal')
 	updateResbarText('energy')
-	if drawBPBar == true then
+	if drawBPBar then
 		updateResbarText('BP')
 	end
 end
@@ -1878,32 +1884,32 @@ local function updateAllyTeamOverflowing()
 	overflowingEnergy = false
 	playerStallingMetal = false
 	playerStallingEnergy = false
-	local totalMetal = 0
-	local totalMetalStorage = 0
 	local totalEnergy = 0
 	local totalEnergyStorage = 0
-	local metalPercentile, energyPercentile 
+	local totalMetal = 0
+	local totalMetalStorage = 0
+	local energyPercentile, metalPercentile
 	local teams = Spring.GetTeamList(myAllyTeamID)
 	for i, teamID in pairs(teams) do
-		local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(teamID, "metal")
-		totalMetal = totalMetal + metal
-		totalMetalStorage = totalMetalStorage + metalStorage
 		local energy, energyStorage, energyPull, energyIncome, energyExpense, energyShare, energySent = spGetTeamResources(teamID, "energy")
 		totalEnergy = totalEnergy + energy
 		totalEnergyStorage = totalEnergyStorage + energyStorage
+		local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(teamID, "metal")
+		totalMetal = totalMetal + metal
+		totalMetalStorage = totalMetalStorage + metalStorage
 		if teamID == myTeamID then
-			metalPercentile = metalSent / totalMetalStorage
 			energyPercentile = energySent / totalEnergyStorage
-			if metalPercentile > 0.0001 then
-				overflowingMetal = metalPercentile * (1 / 0.025)
-				if overflowingMetal > 1 then
-					overflowingMetal = 1
-				end
-			end
+			metalPercentile = metalSent / totalMetalStorage
 			if energyPercentile > 0.0001 then
 				overflowingEnergy = energyPercentile * (1 / 0.025)
 				if overflowingEnergy > 1 then
 					overflowingEnergy = 1
+				end
+			end
+			if metalPercentile > 0.0001 then
+				overflowingMetal = metalPercentile * (1 / 0.025)
+				if overflowingMetal > 1 then
+					overflowingMetal = 1
 				end
 			end
 
@@ -1976,8 +1982,6 @@ function widget:Update(dt)
 		end
 	end
 
-
-	
 	sec = sec + dt
 	if sec > 0.1 then
 		Log("sec > 0.1")
@@ -2203,6 +2207,7 @@ local function drawResBars() --hadles the blinking
 end
 
 function widget:DrawScreen()
+
 	drawResBars()
 
 	local now = os.clock()
@@ -2269,7 +2274,7 @@ function widget:DrawScreen()
 		end
 	end
 
-	if showButtons and dlistButtons1 then
+	if showButtons and dlistButtons1 and buttonsArea['buttons'] then
 		glCallList(dlistButtons1)
 
 		-- changelog changes highlight
@@ -2929,7 +2934,7 @@ function shutdown()
 end
 
 function widget:Shutdown()
-	Spring.SendCommands("resbar 1")
+	--Spring.SendCommands("resbar 1")
 	shutdown()
 	WG['topbar'] = nil
 end
