@@ -130,19 +130,15 @@ local function addOptionFromSpec(optionSpec)
 end
 
 function widget:GetConfigData()
-    local result = {}
-    for _, option in ipairs(OPTION_SPECS) do
-        result[option.configVariable] = getOptionValue(option)
-    end
-    return result
+    return config
 end
 
 function widget:SetConfigData(data)
-    for _, option in ipairs(OPTION_SPECS) do
-        Spring.Echo(option)
-        local configVariable = option.configVariable
-        if data[configVariable] ~= nil then
-            setOptionValue(option, data[configVariable])
+    if data ~= nil then
+        for k, v in pairs(data) do
+            if config[k] ~= nil then
+                config[k] = v
+            end
         end
     end
 end
