@@ -1,10 +1,10 @@
+local versionString = "version 0.1.4, modified 2024-02-03"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
         desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
         author = "Floris and Floris and Floris and Robert82 and gmcnew",
-        date = "2024-02-01",
-        -- created Feb, 2017
+        date = "Feb, 2017",
         license = "GNU GPL, v2 or later", 
         layer = -99980,
         enabled = true, --enabled by default
@@ -1410,7 +1410,7 @@ local function updateResbar(res)  --decides where and what is drawn
                     .. float_to_s(BP['metalExpenseIfAllBPUsed']) .. " M spent if all BP is used, \n"
                     .. float_to_s(BP['energyExpenseIfAllBPUsed']) .. " E spent if all BP is used, \n"
                     .. float_to_s(BP['metalSupportedBP']) .. " BP supported by M income, \n"
-                    .. float_to_s(BP['energySupportedBP']) .. " BP supported by E income,"
+                    .. float_to_s(BP['energySupportedBP']) .. " BP supported by E income,\n\n" .. versionString
             end
 
             -- One tooltip for the entire BP area, which isn't that big.
