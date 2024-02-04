@@ -48,32 +48,38 @@ local config = {
 local OPTION_SPECS = {
     {
         configVariable = "includeFactories",
-        name = "includeFactories",
-        description = "includeFactories",
+        name = "Include factories",
+        description = "Include factories in buildpower calculations",
         type = "bool",
     },
     {
         configVariable = "proMode",
-        name = "proMode",
-        description = "proMode",
+        name = "Pro mode",
+        description = "Show advanced buildpower statistics and debug info",
         type = "bool",
     },
     {
         configVariable = "drawBPBar",
-        name = "drawBPBar",
-        description = "drawBPBar",
+        name = "Draw buildpower bar",
+        description = "Draw the buildpower bar",
         type = "bool",
     },
     {
         configVariable = "drawBPIndicators",
-        name = "drawBPIndicators",
-        description = "drawBPIndicators",
+        name = "Show eco-supported BP",
+        description = "Estimate how much buildpower is supported by your metal and energy income",
+        type = "bool",
+    },
+    {
+        configVariable = "drawBPWindRangeIndicators",
+        name = "Draw wind range indicators",
+        description = "Show how energy-supported buildpower might vary with wind speed",
         type = "bool",
     },
     {
         configVariable = "autoHideButtons",
-        name = "autoHideButtons",
-        description = "autoHideButtons",
+        name = "auto hide buttons",
+        description = "",
         type = "bool",
     },
 }
