@@ -1,4 +1,4 @@
-local versionString = "version 0.1.4, modified 2024-02-03"
+local versionString = "version 0.1.5, modified 2024-02-03"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
@@ -994,7 +994,7 @@ local function updateResbarText(res)
                                     color2 = { 0.25, 0.16, 0, 1 }
                                 end
                             end
-                            RectRound(resbarArea[res][3] - textWidth, resbarArea[res][4] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][4], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
+                            RectRound(resbarArea[res][3] - textWidth, resbarArea[res][2] - 15.5 * widgetScale, resbarArea[res][3], resbarArea[res][2], 3.7 * widgetScale, 0, 0, 1, 1, color1, color2)
                             if res == 'metal' then
                                 if allyteamOverflowingMetal then
                                     color1 = { 1, 0.3, 0.3, 0.25 }
@@ -1012,14 +1012,14 @@ local function updateResbarText(res)
                                     color2 = { 1, 0.88, 0, 0.44 }
                                 end
                             end
-                            RectRound(resbarArea[res][3] - textWidth + bgpadding2, resbarArea[res][4] - 15.5 * widgetScale + bgpadding2, resbarArea[res][3] - bgpadding2, resbarArea[res][4], 2.8 * widgetScale, 0, 0, 1, 1, color1, color2)
+                            RectRound(resbarArea[res][3] - textWidth + bgpadding2, resbarArea[res][2] - 15.5 * widgetScale + bgpadding2, resbarArea[res][3] - bgpadding2, resbarArea[res][2], 2.8 * widgetScale, 0, 0, 1, 1, color1, color2)
                         end
 
                         font2:Begin()
                         font2:SetTextColor(1, 0.88, 0.88, 1)
                         font2:SetOutlineColor(0.2, 0, 0, 0.6)
                         if res ~= 'BP' then
-                            font2:Print(text, resbarArea[res][3], resbarArea[res][4] - 9.3 * widgetScale, fontSize, 'or')
+                            font2:Print(text, resbarArea[res][3], resbarArea[res][2] - 9.3 * widgetScale, fontSize, 'or')
                         elseif config.drawBPBar then
                             local offset = 0
 
@@ -1062,8 +1062,8 @@ function showBuildpowerAlert(resourceArea, text, fontSize, lowlightColor, highli
     text = '   ' .. text .. '   '
     local textWidth = font2:GetTextWidth(text) * fontSize
     -- The gradient has the lowlight color at the bottom and the highlight color at the top.
-    RectRound(resourceArea[3] - (offset + textWidth) + padding, resourceArea[4] - 15.5 * widgetScale + padding, resourceArea[3] - offset - padding, resourceArea[4], 2.8 * widgetScale, 0, 0, 1, 1, lowlightColor, highlightColor)
-    font2:Print(text, resourceArea[3] - offset, resourceArea[4] - 9.3 * widgetScale , fontSize, 'or')
+    RectRound(resourceArea[3] - (offset + textWidth) + padding, resourceArea[2] - 15.5 * widgetScale + padding, resourceArea[3] - offset - padding, resourceArea[2], 2.8 * widgetScale, 0, 0, 1, 1, lowlightColor, highlightColor)
+    font2:Print(text, resourceArea[3] - offset, resourceArea[2] - 9.3 * widgetScale , fontSize, 'or')
     return offset + textWidth
 end
 
