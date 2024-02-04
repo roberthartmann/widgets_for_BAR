@@ -1372,9 +1372,22 @@ local function updateResbar(res)  --decides where and what is drawn
                     eIncomeNoWind = 0
                 end
 
+                local nBuilders = 0
+                local nBuiltBuilders = 0
+                for k, v in pairs(trackedBuilders) do
+                    currentUnitBP = v[1]
+                    unitIsBuilt = v[2]
+                    nBuilders = nBuilders + 1
+                    if unitIsBuilt then
+                        nBuiltBuilders = nBuiltBuilders + 1
+                    end
+                end
+
                 bpTooltipText = bpTooltipText
                     .. "\n\nDEBUG:"
                     .. float_to_s(avgTotalUsedBP) .. " BP used (smoothed), " .. float_to_s(BP['usedBPIfNoStall']) .. " if no stall \n"
+                    .. tostring(nBuilders) .. " tracked builders\n"
+                    .. tostring(nBuiltBuilders) .. " built builders\n"
                     .. float_to_s(BP['usedBPExceptStalled']) .. " BP non-stalled\n"
                     .. tostring(BP[4]) .. " total BP \n"
                     .. float_to_s(BP['metalExpense']) .." M, " .. float_to_s(BP['energyExpense']) .." E spent by all units\n"
@@ -1575,7 +1588,6 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
 end
 
 function init()
-
     r = { metal = { spGetTeamResources(myTeamID, 'metal') }, energy = { spGetTeamResources(myTeamID, 'energy') } }
     if config.drawBPBar then
         r['BP'] = BP
@@ -1851,6 +1863,7 @@ function widget:GameFrame(n)
             BP['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled']
             BP['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall']
 
+            -- TODO: fix drawing reserved BP (BP[3]) too long when cancelling construction of a builder or when switching between players in spectator mode.
             BP[3] = math.floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
             BP[5] = math.floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
 
@@ -2984,12 +2997,12 @@ function widget:Initialize()
     WG['topbar'].hideWindows = function()
         hideWindows()
     end
-    WG['topbar'].setautoHideButtons = function(value)
+    WG['topbar'].setAutoHideButtons = function(value)
         config.autoHideButtons = value
         showButtons = not value
         updateButtons()
     end
-    WG['topbar'].getautoHideButtons = function()
+    WG['topbar'].getAutoHideButtons = function()
         return config.autoHideButtons
     end
     WG['topbar'].getShowButtons = function()
@@ -3145,21 +3158,21 @@ function TrackUnit(unitID, unitDefID, unitTeam, isBuilt) -- needed for exact cal
             if unitDef.isFactory == false or config.includeFactories then
                 trackedNum = trackedNum + 1
                 local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
-                if not UnitDefs[unitDefID].metalCost then
-                    UnitDefs[unitDefID].metalCost = 100 -- Standard value if somthing went wrong
+                local currentUnitMetalCost = 100
+                if UnitDefs[unitDefID].metalCost ~= nil then
+                    currentUnitMetalCost = UnitDefs[unitDefID].metalCost
                 end
-                local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
                 local unitName = UnitDefs[unitDefID].name -- Cost of Comms
                 if unitName == "armcom" or unitName == "corcom" then
                     currentUnitMetalCost = config.metalCostForCommander
                 end
 
-                -- We may have already tracked this unit when it started being built
+                -- We may have already tracked this unit when it started being built. No need to add its BP again.
                 if not trackedBuilders[unitID] then
                     BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-                    trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt }
-                    BP[4] = BP[4] + trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
+                    BP[4] = BP[4] + unitDef.buildSpeed -- BP[4] ^= totalAvailableBP
                 end
+                trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt }
             end
         elseif isBuilt and (unitDef.name == "armwin" or unitDef.name == "corwin") then -- wind generator
             trackedWinds[unitID] = 1
@@ -3176,10 +3189,10 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
             if unitDef.isFactory == false or config.includeFactories then
                 trackedNum = trackedNum - 1
                 local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
-                if not UnitDefs[unitDefID].metalCost then
-                    UnitDefs[unitDefID].metalCost = 100 -- Standard value if somthing went wrong
+                local currentUnitMetalCost = 100
+                if UnitDefs[unitDefID].metalCost ~= nil then
+                    currentUnitMetalCost = UnitDefs[unitDefID].metalCost
                 end
-                local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
                 local unitName = UnitDefs[unitDefID].name -- Cost of Comms
                 if unitName == "armcom" or unitName == "corcom" then
                     currentUnitMetalCost = config.metalCostForCommander
