@@ -1312,22 +1312,22 @@ local function updateResbar(res)  --decides where and what is drawn
                             { 1,   1,   1,   1 }) -- highlight color (RGBA)
                     end
 
-                    -- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
-                    if config.drawBPWindRangeIndicators and BP['eSliderPosition_minWind'] ~= nil and BP['eSliderPosition_maxWind'] ~= nil then
-                        -- Draw a thing rectangle showing the possible positions of the E-supported BP slider based on min and max wind conditions.
-                        RectRound(
-                            barArea[1] + (BP['eSliderPosition_minWind'] * barWidth) - energyIndicatorHalfWidth, -- left
-                            barArea[4] + barIntrusion, -- top of the bar, plus an intrusion upward
-                            barArea[1] + (BP['eSliderPosition_maxWind'] * barWidth) + energyIndicatorHalfWidth, -- right
-                            barArea[4] - barIntrusion + indicatorH, -- to the top of the E indicator assuming no multiplier
-                            (indicatorH * 1 - 2 * barIntrusion) / 2, -- corner size
-                            0, 0, 0, 0, -- don't round any corners
-                            { 0.8, 0.8, 0.0, 1 }, -- lowlight color (RGBA)
-                            { 0.4, 0.4, 0.0, 1 }) -- highlight color (RGBA)
-                    end
-
-                    -- Indicator for the range of buildpower that energy COULD support if the wind changes.
                     if indicatorPosE ~= nil then
+                        -- Indicator for the range of buildpower that energy COULD support if the wind changes.
+                        if config.drawBPWindRangeIndicators and BP['eSliderPosition_minWind'] ~= nil and BP['eSliderPosition_maxWind'] ~= nil then
+                            -- Draw a thin rectangle showing the possible positions of the E-supported BP slider based on min and max wind conditions.
+                            RectRound(
+                                barArea[1] + (BP['eSliderPosition_minWind'] * barWidth) - energyIndicatorHalfWidth, -- left
+                                barArea[4] + barIntrusion, -- top of the bar, plus an intrusion upward
+                                barArea[1] + (BP['eSliderPosition_maxWind'] * barWidth) + energyIndicatorHalfWidth, -- right
+                                barArea[4] - barIntrusion + indicatorH, -- to the top of the E indicator assuming no multiplier
+                                (indicatorH * 1 - 2 * barIntrusion) / 2, -- corner size
+                                0, 0, 0, 0, -- don't round any corners
+                                { 0.8, 0.8, 0.0, 1 }, -- lowlight color (RGBA)
+                                { 0.4, 0.4, 0.0, 1 }) -- highlight color (RGBA)
+                        end
+
+                        -- Indicator for buildpower that current ENERGY income can support. This is shown along the TOP edge of the BP bar.
                         RectRound(
                             barArea[1] + (indicatorPosE * barWidth) - energyIndicatorHalfWidth, -- left
                             barArea[4] - barIntrusion, -- top of the bar, minus an intrusion downward
