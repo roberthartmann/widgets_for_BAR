@@ -1,4 +1,4 @@
-local versionString = "version 0.1.5, modified 2024-02-03"
+local versionString = "version 0.1.6, modified 2024-02-04"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
@@ -1520,11 +1520,16 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
         local valueWidth 
         local additionalWidth = 0  
         if res == 'BP' and config.drawBPBar == true then -- for bp bar only
-            valueWidth = math_floor(((r[res][5] / r[res][4]) * barWidth))
+            local reservedBP = r[res][3]
+            local totalBP = r[res][4]
+            local usedBP = r[res][5]
+
+            valueWidth = math_floor(((usedBP / totalBP) * barWidth))
             if valueWidth > barWidth then
                 valueWidth = barWidth
             end
-            additionalWidth = math_floor(((r[res][3] / r[res][4]) * barWidth)) - valueWidth
+            -- Show reserved BP as a proportion of total BP
+            additionalWidth = math_floor((math.ceil(1, reservedBP / totalBP) * barWidth)) - valueWidth
             if additionalWidth < math_ceil(barHeight * 0.2) or math_ceil(barHeight * 0.2) > barWidth then
                 additionalWidth = 0
             end
