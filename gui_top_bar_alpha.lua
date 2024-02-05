@@ -42,7 +42,10 @@ local config = {
 
     -- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
     drawBPIndicators = true,
-    drawBPWindRangeIndicators = false
+    drawBPWindRangeIndicators = false,
+
+    barScale = 1,
+    barWidth = 1,
 }
 
 -- used to identify when config values have changed
@@ -50,32 +53,32 @@ local prevConfig = {}
 
 local OPTION_SPECS = {
     {
+        configVariable = "drawBPBar",
+        name = "buildpower bar",
+        description = "Draw the buildpower bar (requires reload)",
+        type = "bool",
+    },
+    {
         configVariable = "includeFactories",
-        name = "Include factories",
-        description = "Include factories in buildpower calculations",
+        name = "include factories",
+        description = "Include factories in buildpower calculations (requires reload)",
         type = "bool",
     },
     {
         configVariable = "proMode",
-        name = "Pro mode",
-        description = "Show advanced buildpower statistics and debug info",
-        type = "bool",
-    },
-    {
-        configVariable = "drawBPBar",
-        name = "Draw buildpower bar",
-        description = "Draw the buildpower bar",
+        name = "pro mode",
+        description = "Show advanced buildpower statistics and debug info (requires reload)",
         type = "bool",
     },
     {
         configVariable = "drawBPIndicators",
-        name = "Show eco-supported BP",
+        name = "eco support indicators",
         description = "Estimate how much buildpower is supported by your metal and energy income",
         type = "bool",
     },
     {
         configVariable = "drawBPWindRangeIndicators",
-        name = "Draw wind range indicators",
+        name = "wind range indicators",
         description = "Show how energy-supported buildpower might vary with wind speed",
         type = "bool",
     },
@@ -84,6 +87,26 @@ local OPTION_SPECS = {
         name = "auto hide buttons",
         description = "",
         type = "bool",
+    },
+    {
+        configVariable = "barScale",
+        name = "top bar height",
+        description = "height of the top bar (requires reload)",
+        type = "slider",
+        min = 0.5,
+        max = 2,
+        step = 0.01,
+        value = 1,
+    },
+    {
+        configVariable = "barWidth",
+        name = "top bar width",
+        description = "width of the top bar (requires reload)",
+        type = "slider",
+        min = 1,
+        max = 3,
+        step = 0.01,
+        value = 1,
     },
 }
 
@@ -236,7 +259,7 @@ local CMD_PRIORITY = 34571 --low prio builders
 
 local allowSavegame = true--Spring.Utilities.ShowDevUI()
 
-local ui_scale = tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
+local ui_scale = config.barScale * tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
 
 local fontfile = "fonts/" .. Spring.GetConfigString("bar_font", "Poppins-Regular.otf")
 local fontfile2 = "fonts/" .. Spring.GetConfigString("bar_font2", "Exo2-SemiBold.otf")
@@ -1621,17 +1644,41 @@ function init()
     if config.drawBPBar then
         r['BP'] = BP
     end
-
+    ui_scale = config.barScale * tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
+    height = orgHeight * (1 + (ui_scale - 1) / 1.7)
     topbarArea = { math_floor(xPos + (borderPadding * widgetScale)), math_floor(vsy - (height * widgetScale)), vsx, vsy }
 
     local filledWidth = 0
     local totalWidth = topbarArea[3] - topbarArea[1]
-    local width = math_floor(totalWidth / 4.4)
-    local bpWidth = (config.proMode and math_floor(totalWidth / 6)) or math_floor(totalWidth / 12)
-    if config.drawBPBar then
-        -- If we allocate totalWidth / 2 for M/E/BP bars, give M/E bars whatever's left after BP.
-        width = math_floor((totalWidth / 2 - bpWidth) / 2)
+    local width = math_floor(totalWidth / 4.4) * config.barWidth
+    local bpWidth = 0 -- width of buildpower bar
+    local buttonWidth = math_floor(totalWidth / 4) -- buttons
+
+    local maxTopBarWidth = totalWidth - buttonWidth
+    local smallSections = 1 -- wind
+    if displayTidalSpeed and checkTidalRelevant() then
+        smallSections = smallSections + 1
     end
+    if displayComCounter then
+        smallSections = smallSections + 1
+    end
+    -- need room for wind/tidal/coms
+    local smallSectionsWidth = math_floor((height * 1.18) * widgetScale + widgetSpaceMargin) * smallSections
+    local maxTopBarWidth = totalWidth - buttonWidth * 1.5 - smallSectionsWidth - widgetSpaceMargin
+
+    -- How much space should be used by metal, energy, and buildpower bars combined?
+    local mebCombinedWidth = math.min(width * 2, maxTopBarWidth)
+    if config.drawBPBar then
+        mebCombinedWidth = math.min(width * 2 - widgetSpaceMargin, maxTopBarWidth) -- need an extra widgetSpaceMargin since we have an extra element
+        -- 'width' is used for both metal and energy sections. We're stealing some of this space for buildpower.
+        if config.proMode then
+            bpWidth = math.floor(mebCombinedWidth / 3)
+        else
+            bpWidth = math.floor(mebCombinedWidth / 6)
+        end
+    end
+    -- Split the remaining width equally between metal and energy
+    width = math.floor((mebCombinedWidth - bpWidth) / 2)
 
     -- metal
     resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
@@ -1676,8 +1723,7 @@ function init()
     end
 
     -- buttons
-    width = math_floor(totalWidth / 4)
-    buttonsArea = { topbarArea[3] - width, topbarArea[2], topbarArea[3], topbarArea[4] }
+    buttonsArea = { topbarArea[3] - buttonWidth, topbarArea[2], topbarArea[3], topbarArea[4] }
     updateButtons()
 
     if WG['topbar'] then
@@ -1685,7 +1731,7 @@ function init()
             return { topbarArea[1], topbarArea[2], topbarArea[3], topbarArea[4], widgetScale}
         end
         WG['topbar'].GetFreeArea = function()
-            return { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[3] - width - widgetSpaceMargin, topbarArea[4], widgetScale}
+            return { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[3] - buttonWidth - widgetSpaceMargin, topbarArea[4], widgetScale}
         end
     end
 
