@@ -45,6 +45,9 @@ local config = {
     drawBPWindRangeIndicators = false
 }
 
+-- used to identify when config values have changed
+local prevConfig = {}
+
 local OPTION_SPECS = {
     {
         configVariable = "includeFactories",
@@ -137,6 +140,26 @@ end
 
 function widget:GetConfigData()
     return config
+end
+
+function nullSafeString(s)
+    if s == nil then
+        return "<nil>"
+    end
+    return tostring(s)
+end
+
+function configHasChanged()
+    local anyChange = false
+    for k, v in pairs(config) do
+        --Spring.Echo("comparing " .. nullSafeString(k) .. " = " .. nullSafeString(v) .. " to " .. nullSafeString(prevConfig[k]))
+        if prevConfig[k] ~= nil and prevConfig[k] ~= v then
+            --Spring.Echo(nullSafeString(k) .. " has changed from " .. nullSafeString(prevConfig[k]) .. " to " .. nullSafeString(v))
+            anyChange = true
+        end
+        prevConfig[k] = v
+    end
+    return anyChange
 end
 
 function widget:SetConfigData(data)
@@ -2103,6 +2126,8 @@ function widget:Update(dt)
     if spec and spGetMyTeamID() ~= prevMyTeamID then
         -- check if the team that we are spectating changed
         checkSelfStatus()
+        init()
+    elseif configHasChanged() then
         init()
     end
 
