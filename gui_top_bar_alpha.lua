@@ -1950,7 +1950,6 @@ function widget:GameFrame(n)
             BP['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled']
             BP['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall']
 
-            -- TODO: fix drawing reserved BP (BP[3]) too long when cancelling construction of a builder or when switching between players in spectator mode.
             BP[3] = math.floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
             BP[5] = math.floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
 
