@@ -1314,7 +1314,7 @@ local function updateResbar(res)  --decides where and what is drawn
 
                     if indicatorPosE ~= nil then
                         -- Indicator for the range of buildpower that energy COULD support if the wind changes.
-                        if config.drawBPWindRangeIndicators and BP['eSliderPosition_minWind'] ~= nil and BP['eSliderPosition_maxWind'] ~= nil then
+                        if config.drawBPWindRangeIndicators and numWindGenerators > 0 and BP['eSliderPosition_minWind'] ~= nil and BP['eSliderPosition_maxWind'] ~= nil then
                             -- Draw a thin rectangle showing the possible positions of the E-supported BP slider based on min and max wind conditions.
                             RectRound(
                                 barArea[1] + (BP['eSliderPosition_minWind'] * barWidth) - energyIndicatorHalfWidth, -- left
