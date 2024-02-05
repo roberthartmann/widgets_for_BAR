@@ -206,7 +206,7 @@ end
 -------------------------------------------------------------------------------
 
 -- stores the date that is used for the res calc and BP bar
-local BP = {0, 0, 0.1, 0, 0, 1, 1}
+local BP = {0, 0, 0, 1, 0, 1, 1}
 
 -- Used to store recent positions of the M/E-supported sliders on the BP bar so they can be moved more smoothly.
 BP['mSliderPositions'] = {}
@@ -1529,7 +1529,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
                 valueWidth = barWidth
             end
             -- Show reserved BP as a proportion of total BP
-            additionalWidth = math_floor((math.ceil(1, reservedBP / totalBP) * barWidth)) - valueWidth
+            additionalWidth = math_floor((math.min(1, reservedBP / totalBP) * barWidth)) - valueWidth
             if additionalWidth < math_ceil(barHeight * 0.2) or math_ceil(barHeight * 0.2) > barWidth then
                 additionalWidth = 0
             end
