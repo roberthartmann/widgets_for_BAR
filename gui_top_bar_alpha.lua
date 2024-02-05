@@ -32,9 +32,10 @@ end
 local config = {
     metalCostForCommander = 1250,
     includeFactories = true,
-    proMode = true,
+    proMode = false,
     drawBPBar = true,
     autoHideButtons = false,
+    debugTooltip = false,
 
     -- Buildpower bar: behavior tweaks to consider making permanent _or_ options
     includeConsBeingBuilt = true, -- should we count cons being built? If so, their BP will be considered reserved.
@@ -86,6 +87,12 @@ local OPTION_SPECS = {
         configVariable = "autoHideButtons",
         name = "auto hide buttons",
         description = "",
+        type = "bool",
+    },
+    {
+        configVariable = "debugTooltip",
+        name = "debug data",
+        description = "Show debug data in tooltip when hovering over the buildpower bar",
         type = "bool",
     },
     {
@@ -1418,7 +1425,7 @@ local function updateResbar(res)  --decides where and what is drawn
                     .. textColor .."(grey and yellow indicators on bar)."
             end
 
-            if config.proMode then
+            if config.debugTooltip then
                 local eIncomeNoWind = BP['energyIncomeNoWind']
                 if eIncomeNoWind == nil then
                     eIncomeNoWind = 0
