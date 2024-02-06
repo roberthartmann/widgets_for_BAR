@@ -206,7 +206,7 @@ end
 -------------------------------------------------------------------------------
 
 -- stores the date that is used for the res calc and BP bar
-local BP = {0, 0, 0, 1, 0, 1, 1}
+local BP = {0, 0, 0, 0, 0, 1, 1}
 
 -- Used to store recent positions of the M/E-supported sliders on the BP bar so they can be moved more smoothly.
 BP['mSliderPositions'] = {}
@@ -258,9 +258,6 @@ local spGetUnitDefID = Spring.GetUnitDefID
 local unitCostData = {} --data of all units regarding the building costs, M/BP and E/BP
 local totalStallingM = 0
 local totalStallingE = 0
-local addStalling = true
-
-local CMD_PRIORITY = 34571 --low prio builders
 
 -- build power/ res calc entries end here
 
@@ -282,7 +279,6 @@ local escapeKeyPressesQuit = false
 
 local relXpos = 0.3
 local borderPadding = 5
-local bladeSpeedMultiplier = 0.2
 
 local wholeTeamWastingMetalCount = 0
 
@@ -302,9 +298,12 @@ if UnitDefs[Spring.GetTeamRulesParam(Spring.GetMyTeamID(), 'startUnit')] then
     comTexture = ':n:Icons/'..UnitDefs[Spring.GetTeamRulesParam(Spring.GetMyTeamID(), 'startUnit')].name..'.png'
 end
 
+-- Local variables for function names improve performance. See page 17 of https://www.lua.org/gems/sample.pdf ("Lua Performance Tips", by Roberto Ierusalimschy)
 local math_ceil = math.ceil
 local math_floor = math.floor
+local math_round = math.round
 local math_min = math.min
+local math_max = math.max
 local math_isInRect = math.isInRect
 
 local widgetScale = (0.80 + (vsx * vsy / 6000000))
@@ -337,6 +336,13 @@ local spGetTeamResources = Spring.GetTeamResources
 local spGetMyTeamID = Spring.GetMyTeamID
 local spGetMouseState = Spring.GetMouseState
 local spGetWind = Spring.GetWind
+local spFindUnitCmdDesc = Spring.FindUnitCmdDesc
+local spGetUnitCmdDescs = Spring.GetUnitCmdDescs
+--local spValidUnitID = Spring.ValidUnitID
+--local spGetUnitCurrentBuildPower = Spring.GetUnitCurrentBuildPower
+local spGetUnitResources = Spring.GetUnitResources
+--local spGetUnitCommands = Spring.GetUnitCommands
+--local spGetFactoryCommands = Spring.GetFactoryCommands
 
 local isMetalmap = false
 
@@ -353,9 +359,9 @@ local numTeamsInAllyTeam = #myAllyTeamList
 
 local function checkPriority(unitID) -- needed for exact calculations
     -- Check if the "priority" command is set to "High Priority" or "Low Priority"
-    local cmdDescID = Spring.FindUnitCmdDesc(unitID, CMD_PRIORITY)
+    local cmdDescID = spFindUnitCmdDesc(unitID, 34571) -- CMD_PRIORITY=34571, low-priority builders
     if cmdDescID then
-        local cmdDesc = Spring.GetUnitCmdDescs(unitID, cmdDescID, cmdDescID)[1]
+        local cmdDesc = spGetUnitCmdDescs(unitID, cmdDescID, cmdDescID)[1]
         if cmdDesc then
             if cmdDesc.params[1] == "1" then
                 return "high"  -- The unit is set to "High Priority"
@@ -395,7 +401,7 @@ if avgWindValue ~= nil then
     avgWindValue = avgWindValue[maxWind]
 end
 if avgWindValue == nil then
-    avgWindValue = "~" .. tostring(math.max(minWind, maxWind * .75)) --fallback approximation
+    avgWindValue = "~" .. tostring(math_max(minWind, maxWind * .75)) --fallback approximation
 end
 -- pull wind risk from precomputed table, if it exists
 local riskWindValue = riskWind[minWind]
@@ -1138,13 +1144,13 @@ local function updateResbar(res)  --decides where and what is drawn
     local shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
     local barWidth = barArea[3] - barArea[1]
     local glowSize = barHeight * 7
-    local edgeWidth = math.max(1, math_floor(vsy / 1100))
+    local edgeWidth = math_max(1, math_floor(vsy / 1100))
 
     if not showQuitscreen and resbarHover ~= nil and resbarHover == res then
         sliderHeightAdd = barHeight / 0.75
         shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
     end
-    shareSliderWidth = math.ceil(shareSliderWidth)
+    shareSliderWidth = math_ceil(shareSliderWidth)
 
     if res == 'metal' then
         resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
@@ -1395,9 +1401,9 @@ local function updateResbar(res)  --decides where and what is drawn
             -- TODO: ensure these are consistent with text/highlight colors elsewhere in BAR.
             local textColor = '\255\215\215\215'
             local highlightColor = '\255\255\255\255'
-            local avgTotalReservedBP = math.round(BP[3])
+            local avgTotalReservedBP = math_round(BP[3])
             local totalAvailableBP = BP[4]
-            local avgTotalUsedBP = math.round(BP[5])
+            local avgTotalUsedBP = math_round(BP[5])
 
             local reservedDesc = "(Reserved: in-use, walking to a job, or stalled.)"
             local idleDesc = " idle BP (red)."
@@ -1520,16 +1526,16 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
         local valueWidth 
         local additionalWidth = 0  
         if res == 'BP' and config.drawBPBar == true then -- for bp bar only
-            local reservedBP = r[res][3]
-            local totalBP = r[res][4]
-            local usedBP = r[res][5]
+            local totalBP = math_max(1, r[res][4])
+            local reservedBP = math_min(totalBP, r[res][3])
+            local usedBP = math_min(totalBP, r[res][5])
 
             valueWidth = math_floor(((usedBP / totalBP) * barWidth))
             if valueWidth > barWidth then
                 valueWidth = barWidth
             end
             -- Show reserved BP as a proportion of total BP
-            additionalWidth = math_floor((math.min(1, reservedBP / totalBP) * barWidth)) - valueWidth
+            additionalWidth = math_floor((reservedBP / totalBP) * barWidth) - valueWidth
             if additionalWidth < math_ceil(barHeight * 0.2) or math_ceil(barHeight * 0.2) > barWidth then
                 additionalWidth = 0
             end
@@ -1679,18 +1685,18 @@ function init()
     local maxTopBarWidth = totalWidth - buttonWidth * 1.5 - smallSectionsWidth - widgetSpaceMargin
 
     -- How much space should be used by metal, energy, and buildpower bars combined?
-    local mebCombinedWidth = math.min(width * 2, maxTopBarWidth)
+    local mebCombinedWidth = math_min(width * 2, maxTopBarWidth)
     if config.drawBPBar then
-        mebCombinedWidth = math.min(width * 2 - widgetSpaceMargin, maxTopBarWidth) -- need an extra widgetSpaceMargin since we have an extra element
+        mebCombinedWidth = math_min(width * 2 - widgetSpaceMargin, maxTopBarWidth) -- need an extra widgetSpaceMargin since we have an extra element
         -- 'width' is used for both metal and energy sections. We're stealing some of this space for buildpower.
         if config.proMode then
-            bpWidth = math.floor(mebCombinedWidth / 3)
+            bpWidth = math_floor(mebCombinedWidth / 3)
         else
-            bpWidth = math.floor(mebCombinedWidth / 6)
+            bpWidth = math_floor(mebCombinedWidth / 6)
         end
     end
     -- Split the remaining width equally between metal and energy
-    width = math.floor((mebCombinedWidth - bpWidth) / 2)
+    width = math_floor((mebCombinedWidth - bpWidth) / 2)
 
     -- metal
     resbarArea['metal'] = { topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
@@ -1806,6 +1812,7 @@ function widget:GameFrame(n)
     Log("n " ..n)
     spec = spGetSpectatingState()
 
+    local bladeSpeedMultiplier = 0.2
     windRotation = windRotation + (currentWind * bladeSpeedMultiplier)
     gameFrame = n
     
@@ -1834,14 +1841,22 @@ function widget:GameFrame(n)
         --Log("." )
         --Log("." )
         --Log("trackedNum" ..trackedNum)
+
+        -- We may have multiple constructors who are building the same unit. No need to call GetUnitDefID multiple times.
+        local unitDefsBeingBuilt = {}
+
         for unitID, unitData in pairs(trackedBuilders) do --calculation of exact pull
+            -- TODO: this is bugged:
+            -- (1) pairs() doesn't iterate in a deterministic fashion.
+            -- (2) if we have 102 units and check 100 per frame, the first frame is checking units 1..100 and the second frame is checking units 1..2 instead of 101..102.
             if nowChecking >= trackPosBase then -- begin at trackedPos with calcs
-                currentUnitBP = unitData[1]
-                unitIsBuilt = unitData[2]
+                local currentUnitBP = unitData[1]
+                local unitIsBuilt = unitData[2]
+                local unitDefID = unitData[3]
                 if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
                     break
                 end
-                if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then
+                if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then -- TODO: is the GetUnitIsDead check really necessary?
                     InitAllUnits()
                 elseif not unitIsBuilt then
                     -- Units still being built count as reserved.
@@ -1849,17 +1864,31 @@ function widget:GameFrame(n)
                 else
                     --Log("nowChecking" ..nowChecking)
                     --totalAvailableBP = totalAvailableBP + currentUnitBP
-                    local unitDefID = spGetUnitDefID(unitID)
-                    local foundActivity, _ = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-                    local _, currentlyUsedM, _, currentlyUsedE = Spring.GetUnitResources(unitID)
-                    if foundActivity == true or currentlyUsedM > 0 or currentlyUsedE > 0 then
+                    local foundActivity, builtUnitDefID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
+
+                    if foundActivity then
+
+                        -- Assume all of this unit's buildpower is reserved.
                         local unitReservedBP = currentUnitBP
-                        local builtUnitID = spGetUnitIsBuilding(unitID)
-                        if builtUnitID then
+
+                        -- This unit is active but we don't know what it might be building. See if it's building something.
+                        if not builtUnitDefID then
+                            local builtUnitID = spGetUnitIsBuilding(unitID)
+                            if builtUnitID ~= nil then
+                                builtUnitDefID = unitDefsBeingBuilt[builtUnitID]
+                                if builtUnitDefID == nil then
+                                    builtUnitDefID = spGetUnitDefID(builtUnitID)
+                                    unitDefsBeingBuilt[builtUnitID] = builtUnitDefID
+                                end
+                            end
+                        end
+
+                        if builtUnitDefID then
+
+                            local _, currentlyUsedM, _, currentlyUsedE = spGetUnitResources(unitID)
                             usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
                             usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
-                            local builtUnitDefID = spGetUnitDefID(builtUnitID)
                             currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
                             currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP
                             buildingBP = buildingBP + currentUnitBP
@@ -1921,7 +1950,7 @@ function widget:GameFrame(n)
         if config.drawBPWindRangeIndicators then
             local realWindStrength = 0
             for unitID in pairs(trackedWinds) do
-                local metalMake, metalUse, energyMake, energyUse = Spring.GetUnitResources(unitID)
+                local metalMake, metalUse, energyMake, energyUse = spGetUnitResources(unitID)
                 if energyMake ~= nil then
                     realWindStrength = energyMake
                     break
@@ -1950,8 +1979,8 @@ function widget:GameFrame(n)
             BP['usedBPExceptStalled'] = cacheDataBase['usedBPExceptStalled']
             BP['usedBPIfNoStall'] = cacheDataBase['usedBPIfNoStall']
 
-            BP[3] = math.floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
-            BP[5] = math.floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
+            BP[3] = math_floor(addSampleAndGetWeightedAverage(BP['history_reservedBP'], BP['reservedBP_instant'], 1) + 0.5)
+            BP[5] = math_floor(addSampleAndGetWeightedAverage(BP['history_usedBP'], BP['usedBP_instant'], 1) + 0.5)
 
             if config.drawBPWindRangeIndicators then
                 BP['realWindStrength_instant'] = cacheDataBase['realWindStrength']
@@ -2004,21 +2033,21 @@ function widget:GameFrame(n)
                 if BP['metalExpensePerBP'] > 0 then
                     BP['metalSupportedBP'] = (BP['metalIncome'] - metalExpenseMinusBuilders) / BP['metalExpensePerBP']
                     minSupportedBP = BP['metalSupportedBP']
-                    bpRatioSupportedByMIncome = math.max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
+                    bpRatioSupportedByMIncome = math_max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
                 end
 
                 if BP['energyExpensePerBP'] > 0 then
                     BP['energySupportedBP'] = (BP['energyIncome'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
                     minSupportedBP = BP['energySupportedBP']
-                    bpRatioSupportedByEIncome = math.max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
+                    bpRatioSupportedByEIncome = math_max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
 
                     if config.drawBPWindRangeIndicators then
                         eSupportedBP_minWind = (BP['energyIncomeNoWind'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
-                        local bpRatioSupportedByEIncome_minWind = math.max(0, math_min(eSupportedBP_minWind / totalBP, 1))
+                        local bpRatioSupportedByEIncome_minWind = math_max(0, math_min(eSupportedBP_minWind / totalBP, 1))
 
-                        maxEPerWindGenerator = math.min(25, Game.windMax)
+                        maxEPerWindGenerator = math_min(25, Game.windMax)
                         eSupportedBP_maxWind = (BP['energyIncomeNoWind'] + numWindGenerators * maxEPerWindGenerator - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
-                        local bpRatioSupportedByEIncome_maxWind = math.max(0, math_min(eSupportedBP_maxWind / totalBP, 1))
+                        local bpRatioSupportedByEIncome_maxWind = math_max(0, math_min(eSupportedBP_maxWind / totalBP, 1))
 
                         BP['eSliderPosition_minWind'] = addSampleAndGetWeightedAverage(BP['history_eSliderPosition_minWind'], bpRatioSupportedByEIncome_minWind, BP['usedBP_instant'])
                         BP['eSliderPosition_maxWind'] = addSampleAndGetWeightedAverage(BP['history_eSliderPosition_maxWind'], bpRatioSupportedByEIncome_maxWind, BP['usedBP_instant'])
@@ -2033,7 +2062,7 @@ function widget:GameFrame(n)
                     -- How much buildpower do we have, beyond what's necessary to keep up with our economy?
                     BP['buildpowerSurplus'] = totalBP - minSupportedBP
                     -- round up to the nearest 10 BP
-                    BP['buildpowerSurplus'] = math.ceil(BP['buildpowerSurplus'] / 10) * 10
+                    BP['buildpowerSurplus'] = math_ceil(BP['buildpowerSurplus'] / 10) * 10
                 end
             end
 
@@ -2101,7 +2130,7 @@ function median(t)
   
     table.sort(tSorted)
 
-    midpoint = math.floor(#tSorted / 2)
+    midpoint = math_floor(#tSorted / 2)
     if math.fmod(#tSorted, 2) == 0 then
         return (tSorted[midpoint] + tSorted[midpoint + 1]) / 2
     else
@@ -2584,7 +2613,7 @@ function widget:DrawScreen()
                 local padding = math_floor(w / 90)
                 local textTopPadding = padding + padding + padding + padding + padding + fontSize
                 local txtWidth = font:GetTextWidth(text) * fontSize
-                w = math.max(w, txtWidth + textTopPadding + textTopPadding)
+                w = math_max(w, txtWidth + textTopPadding + textTopPadding)
 
                 local x = math_floor((vsx / 2) - (w / 2))
                 local y = math_floor((vsy / 1.8) - (h / 2))
@@ -3194,23 +3223,30 @@ end
 
 
 function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likely
-    --Log("findBPCommand")
-    local commands = Spring.GetUnitCommands(unitID, -1)
     local unitDef = UnitDefs[unitDefID]
-    if unitDef.isFactory == true then
-        --Log("unitDef.isFactory == true")
-        if #Spring.GetFactoryCommands(unitID, -1) > 0 then
-
-            local firstTime = i
-            return true, firstTime
+    local builtUnitDefID = nil
+    if unitDef.isFactory then
+        -- The factory is active if it has at least one command.
+        local f = Spring.GetFactoryCommands(unitID, 1)
+        if #f > 0 then
+            -- A factory's first command should be a build command whose ID is the negative unitdef of what's being built.
+            if f[1].id < 0 then
+                builtUnitDefID = -f[1].id
+            end
+            return true, builtUnitDefID
         end
-    end
-    for i = 1, #commands do
-        for _, relevantCMD in ipairs(cmdList) do
-            if commands[i].id == relevantCMD or commands[i].id < 0 then
-                --Log("commands[i].id == relevantCMD or commands[i].id < 0")
-                local firstTime = i
-                return true, firstTime
+    else
+        -- A unit is only active if at least one of its commands are in the command list.
+        local commands = Spring.GetUnitCommands(unitID, -1)
+        for i = 1, #commands do
+            for _, relevantCMD in ipairs(cmdList) do
+                if commands[i].id == relevantCMD or commands[i].id < 0 then -- a negative command ID means we're building something
+                    if commands[i].id < 0 then
+                        -- We know exactly what this unit is building: a negative command ID is the negative unitdef of what's being built.
+                        --builtUnitDefID = -commands[i].id
+                    end
+                    return true, builtUnitDefID
+                end
             end
         end
     end
@@ -3260,7 +3296,7 @@ function TrackUnit(unitID, unitDefID, unitTeam, isBuilt) -- needed for exact cal
                     BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
                     BP[4] = BP[4] + unitDef.buildSpeed -- BP[4] ^= totalAvailableBP
                 end
-                trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt }
+                trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt, unitDefID }
             end
         elseif isBuilt and (unitDef.name == "armwin" or unitDef.name == "corwin") then -- wind generator
             trackedWinds[unitID] = 1
@@ -3286,7 +3322,7 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
                     currentUnitMetalCost = config.metalCostForCommander
                 end
                 BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-                trackedBuilders[unitID] = { unitDef.buildSpeed, true } -- assume this unit is built
+                trackedBuilders[unitID] = { unitDef.buildSpeed, true, unitDefID } -- assume this unit is built
                 BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
             end
         end
