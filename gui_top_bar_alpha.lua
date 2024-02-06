@@ -17,12 +17,6 @@ function Log(Message)
         Spring.Echo(Message)
     end
 end
-local Debugmode1 = false
-function Log1(Message)
-    if Debugmode1 == true then
-        Spring.Echo(Message)
-    end
-end
 
 -------------------------------CONFIG------------------------------------------
 -------------------------------------------------------------------------------
