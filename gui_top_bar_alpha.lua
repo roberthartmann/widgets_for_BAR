@@ -1483,15 +1483,21 @@ local function updateResbar(res)  --decides where and what is drawn
 
             local bpSurplus = BP['buildpowerSurplus']
 
-            if bpSurplus ~= nil then
-                local currentTooltipText
-                if bpSurplus == 0 then
-                    currentTooltipText = textColor .. "You have just enough buildpower to keep up with your income"
-                elseif bpSurplus > 0 then
-                    currentTooltipText = textColor .. "You have " .. highlightColor .. bpSurplus .. textColor .. " buildpower more than you need " .. textColor .. "to keep up with your income"
-                else
-                    currentTooltipText = textColor .. "You need " .. highlightColor .. -bpSurplus .. textColor .. " more buildpower " .. textColor .. "to keep up with your income"
+            local currentTooltipText = ""
+            if config.proMode then
+                if bpSurplus ~= nil then
+                    if bpSurplus == 0 then
+                        currentTooltipText = textColor .. "You have just enough buildpower to keep up with your income"
+                    elseif bpSurplus > 0 then
+                        currentTooltipText = textColor .. "You have " .. highlightColor .. bpSurplus .. textColor .. " buildpower more than you need " .. textColor .. "to keep up with your income"
+                    else
+                        currentTooltipText = textColor .. "You need " .. highlightColor .. -bpSurplus .. textColor .. " more buildpower " .. textColor .. "to keep up with your income"
+                    end
                 end
+            elseif BP[4] > 0 then
+                currentTooltipText = textColor .. "You are using " .. highlightColor .. math_round(BP[3] * 100 / BP[4]) .. textColor .. "% of your buildpower."
+            end
+            if currentTooltipText ~= "" then
                 WG['tooltip'].AddTooltip(res .. '_Current', {
                     resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2),
                     resbarDrawinfo[res].textCurrent[3],
@@ -1617,11 +1623,32 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
         if updateText then
             currentResValue[res] = short(cappedCurRes)
             if not dlistResValues[res][currentResValue[res]] then
+
+                local bpCurrentColor = { 0.7,  0.7,  0.7,  1.0 }
+                local bpCurrentText = nil
+                local suffix = ""
+
                 if res == 'BP' and config.drawBPBar == true then
-                    if BP['buildpowerSurplus'] == nil then
-                        currentResValue[res] = ""
-                    else
+                    currentResValue[res] = ""
+                    -- Should we show surplus BP, or percent-reserved?
+                    if (not config.proMode) then
+                        if BP[4] > 0 then
+                            currentResValue[res] = math_round(BP[3] * 100 / BP[4])
+                            if     currentResValue[res] < 40 then bpCurrentColor = { 0.82, 0.39, 0.39, 1.0 } --Red
+                            elseif currentResValue[res] < 60 then bpCurrentColor = { 1.0,  0.39, 0.39, 1.0 } --Orange
+                            elseif currentResValue[res] < 80 then bpCurrentColor = { 1.0,  1.0,  0.39, 1.0 } --Yellow
+                            else                                  bpCurrentColor = { 0.47, 0.92, 0.47, 1.0 } --Green
+                            end
+                            suffix = "%"
+                        end
+                    elseif BP['buildpowerSurplus'] then
                         currentResValue[res] = BP['buildpowerSurplus']
+                        if     currentResValue[res] < -400 then bpCurrentColor = { 0.82, 0.39, 0.39, 1.0 } --Red
+                        elseif currentResValue[res] < -300 then bpCurrentColor = { 1.0,  0.39, 0.39, 1.0 } --Orange
+                        elseif currentResValue[res] < -100 then bpCurrentColor = { 1.0,  1.0,  0.39, 1.0 } --Yellow
+                        elseif currentResValue[res] <    0 then bpCurrentColor = { 0.84, 0.90, 0.39, 1.0 } --Light Yellow
+                        else                                    bpCurrentColor = { 0.7,  0.7,  0.7,  1.0 } --Grey: no judgment as to how _much_ surplus someone has, as long as it's non-negative
+                        end
                     end
                 end
                 dlistResValues[res][currentResValue[res]] = glCreateList(function()
@@ -1631,19 +1658,12 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
                         font2:SetTextColor(0.95, 0.95, 0.95, 1)
                     elseif  res == 'energy' then
                         font2:SetTextColor(1, 1, 0.74, 1)
-                    elseif config.drawBPBar and BP['buildpowerSurplus'] ~= nil then  -- for bp bar only
-                        local color
-                        if     currentResValue[res] < -400 then color = { 0.82, 0.39, 0.39, 1.0 } --Red
-                        elseif currentResValue[res] < -300 then color = { 1.0,  0.39, 0.39, 1.0 } --Orange
-                        elseif currentResValue[res] < -100 then color = { 1.0,  1.0,  0.39, 1.0 } --Yellow
-                        elseif currentResValue[res] <    0 then color = { 0.84, 0.90, 0.39, 1.0 } --Light Yellow
-                        else                                    color = { 0.7,  0.7,  0.7,  1.0 } --Grey: no judgment as to how _much_ surplus someone has, as long as it's non-negative
-                        end
-                        font2:SetTextColor(color[1], color[2], color[3], color[4])
+                    elseif config.drawBPBar then  -- for bp bar only
+                        font2:SetTextColor(bpCurrentColor[1], bpCurrentColor[2], bpCurrentColor[3], bpCurrentColor[4])
                     end
                     -- Text: current
                     font2:SetOutlineColor(0, 0, 0, 1)
-                    font2:Print(currentResValue[res], resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
+                    font2:Print(currentResValue[res] .. suffix, resbarDrawinfo[res].textCurrent[2], resbarDrawinfo[res].textCurrent[3], resbarDrawinfo[res].textCurrent[4], resbarDrawinfo[res].textCurrent[5])
                     font2:End()
                 end)
             end
