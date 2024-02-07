@@ -210,18 +210,64 @@ BP['energyIncome'] = 0
 BP['metalExpense'] = 0
 BP['energyExpense'] = 0
 
+-- Use circular queues so we don't have to repeatedly shift the tables' contents.
+function initWeightedAverage(maxN)
+    return {
+        maxn = maxN,-- max number of elements
+        i = 1, -- next index to write to
+        curn = 0, -- current number of elements
+        sum_sw = 0, -- sum(sample*weight)
+        sum_w = 0, -- sum(weight)
+        s = {}, -- samples
+        w = {}, -- weights
+    }
+end
+
+function addSampleAndGetWeightedAverage(t, newSample, newWeight)
+    if newSample ~= nil then
+        if t.i <= t.curn then
+            -- remove the old sample and weight
+            t.sum_sw = t.sum_sw - (t.s[t.i] * t.w[t.i])
+            t.sum_w = t.sum_w - t.w[t.i]
+        end
+
+        -- add the new sample and weight
+        t.s[t.i] = newSample
+        t.w[t.i] = newWeight
+        t.sum_sw = t.sum_sw + newSample * newWeight
+        t.sum_w = t.sum_w + newWeight
+
+        -- update the table's size
+        if t.curn < t.maxn then
+            t.curn = t.curn + 1
+        end
+
+        -- move i ahead
+        t.i = t.i + 1
+        if t.i > t.maxn then
+            t.i = 1
+        end
+    end
+
+    if t.sum_w == 0 then
+        return nil
+    end
+
+    return t.sum_sw / t.sum_w
+end
+
 -- Lists of recent datapoints, used for smoothing. The first element is the number of datapoints to keep, the second is the datapoints themselves.
-BP['history_usedBP'] = { 30, {} } -- used to calculate the average used BP
-BP['history_reservedBP'] = { 30, {} } -- used to calculate the average reserved BP
-BP['history_nonBuilderMetalExpense'] = { 100, {} } -- average metal expense from non-builders
-BP['history_nonBuilderEnergyExpense'] = { 100, {} } -- average energy expense from non-builders
-BP['history_mSliderPosition'] = { 30, {} } -- average metal expense from non-builders
+BP['history_usedBP'] = initWeightedAverage(30) -- used to calculate the average used BP
+BP['history_reservedBP'] = initWeightedAverage(30) -- used to calculate the average reserved BP
+BP['history_nonBuilderMetalExpense'] = initWeightedAverage(100) -- average metal expense from non-builders
+BP['history_nonBuilderEnergyExpense'] = initWeightedAverage(100) -- average energy expense from non-builders
+BP['history_mSliderPosition'] = initWeightedAverage(30) -- average metal expense from non-builders
 
 -- How much of our buildpower can be supported by our energy income, expressed as a ratio from 0 to 1?
-BP['history_eSliderPosition'] = { 30, {} }
-BP['history_eSliderPosition_minWind'] = { 30, {} } -- if wind is at its minimum?
-BP['history_eSliderPosition_maxWind'] = { 30, {} } -- if wind is at its maximum?
-BP['history_eIncomeNoWind'] = { 30, {} } -- how much energy income is from non-wind sources?
+BP['history_eSliderPosition'] = initWeightedAverage(30)
+BP['history_eSliderPosition_minWind'] = initWeightedAverage(30) -- if wind is at its minimum?
+BP['history_eSliderPosition_maxWind'] = initWeightedAverage(30) -- if wind is at its maximum?
+BP['history_eIncomeNoWind'] = initWeightedAverage(30) -- how much energy income is from non-wind sources?
 
 BP['reservedBP_instant'] = 0
 BP['usedBP_instant'] = 0
@@ -330,8 +376,8 @@ local spGetTeamResources = Spring.GetTeamResources
 local spGetMyTeamID = Spring.GetMyTeamID
 local spGetMouseState = Spring.GetMouseState
 local spGetWind = Spring.GetWind
-local spFindUnitCmdDesc = Spring.FindUnitCmdDesc
-local spGetUnitCmdDescs = Spring.GetUnitCmdDescs
+--local spFindUnitCmdDesc = Spring.FindUnitCmdDesc
+--local spGetUnitCmdDescs = Spring.GetUnitCmdDescs
 --local spValidUnitID = Spring.ValidUnitID
 --local spGetUnitCurrentBuildPower = Spring.GetUnitCurrentBuildPower
 local spGetUnitResources = Spring.GetUnitResources
@@ -353,9 +399,9 @@ local numTeamsInAllyTeam = #myAllyTeamList
 
 local function checkPriority(unitID) -- needed for exact calculations
     -- Check if the "priority" command is set to "High Priority" or "Low Priority"
-    local cmdDescID = spFindUnitCmdDesc(unitID, 34571) -- CMD_PRIORITY=34571, low-priority builders
+    local cmdDescID = Spring.FindUnitCmdDesc(unitID, 34571) -- CMD_PRIORITY=34571, low-priority builders
     if cmdDescID then
-        local cmdDesc = spGetUnitCmdDescs(unitID, cmdDescID, cmdDescID)[1]
+        local cmdDesc = Spring.GetUnitCmdDescs(unitID, cmdDescID, cmdDescID)[1]
         if cmdDesc then
             if cmdDesc.params[1] == "1" then
                 return "high"  -- The unit is set to "High Priority"
@@ -2108,29 +2154,6 @@ function widget:GameFrame(n)
     Log("GameFrame(n)")
 end
 
--- Assumes the history table is of the form { numSamples, { {s0, w0}, {s1, w1} ... } }
--- where s0 and s1 are sample values and w0 and w1 are their weights.
-function addSampleAndGetWeightedAverage(history, newSample, newWeight)
-    numSamples = history[1]
-    samples = history[2]
-    if newSample ~= nil then
-        table.insert(samples, { newSample, newWeight })
-        if #samples > numSamples then
-            table.remove(samples, 1)
-        end
-    end
-
-    local sampleWeightedSum = 0
-    local weightSum = 0
-    for _, sw in ipairs(samples) do
-        sampleWeightedSum = sampleWeightedSum + sw[1] * sw[2]
-        weightSum = weightSum + sw[2]
-    end
-    if weightSum == 0 then
-        return nil
-    end
-    return sampleWeightedSum / weightSum
-end
 
 function median(t)
     if not t or #t < 1 then
