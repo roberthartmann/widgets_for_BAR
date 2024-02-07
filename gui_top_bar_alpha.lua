@@ -1904,7 +1904,7 @@ function widget:GameFrame(n)
                             usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
                             currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-                            currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP
+                            currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP -- everything costs at least 1 metal
                             buildingBP = buildingBP + currentUnitBP
 
                             local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
@@ -3058,7 +3058,7 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitTaken(unitID, unitDefID, unitTeam)
-    UntrackUnit(unitID)
+    UntrackUnit(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitGiven(unitID, unitDefID, unitTeam)
@@ -3070,7 +3070,7 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-    UntrackUnit(unitID)
+    UntrackUnit(unitID, unitDefID, unitTeam)
     if not isCommander[unitDefID] then
         return
     end
@@ -3310,7 +3310,7 @@ function TrackUnit(unitID, unitDefID, unitTeam, isBuilt) -- needed for exact cal
                     BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
                     BP[4] = BP[4] + unitDef.buildSpeed -- BP[4] ^= totalAvailableBP
                 end
-                trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt, unitDefID }
+                trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt, unitDefID, unitTeam }
             end
         elseif isBuilt and (unitDef.name == "armwin" or unitDef.name == "corwin") then -- wind generator
             trackedWinds[unitID] = 1
@@ -3336,13 +3336,15 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
                     currentUnitMetalCost = config.metalCostForCommander
                 end
                 BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-                trackedBuilders[unitID] = { unitDef.buildSpeed, true, unitDefID } -- assume this unit is built
                 BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
             end
         end
     end
+    if trackedBuilders[unitID] then
+         trackedBuilders[unitID] = nil
+    end
     if trackedWinds[unitID] then
-        table.remove(trackedWinds, unitID)
+        trackedWinds[unitID] = nil
         numWindGenerators = numWindGenerators - 1
     end
 end
