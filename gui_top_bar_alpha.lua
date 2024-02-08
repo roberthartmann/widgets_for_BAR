@@ -249,7 +249,7 @@ function addSampleAndGetWeightedAverage(t, newSample, newWeight)
         end
     end
 
-    if t.sum_w == 0 then
+    if math.abs(t.sum_w) < 0.01 then
         return nil
     end
 
