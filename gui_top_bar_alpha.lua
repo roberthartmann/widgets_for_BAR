@@ -1,4 +1,4 @@
-local versionString = "version 0.1.6, modified 2024-02-05"
+local versionString = "version 0.1.6, modified 2024-02-09"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
@@ -291,10 +291,6 @@ local trackedBuilders = {} -- stores units of the player and their BP
 local trackedWinds = {}
 local numWindGenerators = 0
 
-local spSetUnitBuildSpeed = Spring.SetUnitBuildSpeed
-local spGetUnitIsBuilding = Spring.GetUnitIsBuilding
-local spGetUnitDefID = Spring.GetUnitDefID
-
 local unitCostData = {} --data of all units regarding the building costs, M/BP and E/BP
 local totalStallingM = 0
 local totalStallingE = 0
@@ -371,6 +367,8 @@ local GL_SRC_ALPHA = GL.SRC_ALPHA
 local GL_ONE_MINUS_SRC_ALPHA = GL.ONE_MINUS_SRC_ALPHA
 local GL_ONE = GL.ONE
 
+local spGetUnitIsBuilding = Spring.GetUnitIsBuilding
+local spGetUnitDefID = Spring.GetUnitDefID
 local spGetSpectatingState = Spring.GetSpectatingState
 local spGetTeamResources = Spring.GetTeamResources
 local spGetMyTeamID = Spring.GetMyTeamID
@@ -1879,11 +1877,12 @@ function widget:GameFrame(n)
     -- calculations for the exact metal and energy draw value
 
     Log("cache")
+    local gameFrameFreq = 2 -- TODO: get this to 1
+    local unp = unpack or table.unpack
     -- If we're supposed to draw the buildpower bar, do some calculations.
     -- Skip frames between calculations _unless_ we have too many builders to do them all in one frame, in which case nowChecking will be positive when the previous frame didn't finish.
-    if config.drawBPBar and ((gameFrame % 2 == 0) or nowChecking > 0) then
-        gameStarted = true
-
+    if config.drawBPBar and ((gameFrame % gameFrameFreq == 0) or nowChecking > 0) then
+        gameStarted = true -- TODO: is this needed?
         local cacheTotalStallingM = 0
         local cacheTotalStallingE = 0
 
@@ -1910,29 +1909,31 @@ function widget:GameFrame(n)
             -- (1) pairs() doesn't iterate in a deterministic fashion.
             -- (2) if we have 102 units and check 100 per frame, the first frame is checking units 1..100 and the second frame is checking units 1..2 instead of 101..102.
             if nowChecking >= trackPosBase then -- begin at trackedPos with calcs
-                local currentUnitBP = unitData[1]
-                local unitIsBuilt = unitData[2]
-                local unitDefID = unitData[3]
+                local currentUnitBP, unitIsBuilt, unitDefID, unitTeamID = unp(unitData)
                 if (nowChecking >= trackPosBase + unitsPerFrame) or nowChecking > trackedNum then -- end at trackPosBase + unitsPerFrame with calcs
                     break
                 end
-                if not Spring.ValidUnitID(unitID) or Spring.GetUnitIsDead(unitID) then -- TODO: is the GetUnitIsDead check really necessary?
-                    InitAllUnits()
-                elseif not unitIsBuilt then
-                    -- Units still being built count as reserved.
-                    cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
-                else
-                    --Log("nowChecking" ..nowChecking)
-                    --totalAvailableBP = totalAvailableBP + currentUnitBP
-                    local foundActivity, builtUnitDefID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
 
-                    if foundActivity then
+                if not unitIsBuilt then
+                    local isDead = Spring.GetUnitIsDead(unitID)
+                    if isDead ~= false then -- unit is dead _or_ nonexistent
+                        UntrackUnit(unitID, unitDefID, unitTeamID)
+                    else
+                        -- Units still being built count as reserved.
+                        cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+                    end
+                else
+                    local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
+
+                    if not unitExists then
+                        UntrackUnit(unitID)
+                    elseif foundActivity then
 
                         -- Assume all of this unit's buildpower is reserved.
                         local unitReservedBP = currentUnitBP
 
-                        -- This unit is active but we don't know what it might be building. See if it's building something.
-                        if not builtUnitDefID then
+                        -- This unit might be building, but we don't know what. See if it's building something.
+                        if mayBeBuilding and not builtUnitDefID then
                             local builtUnitID = spGetUnitIsBuilding(unitID)
                             if builtUnitID ~= nil then
                                 builtUnitDefID = unitDefsBeingBuilt[builtUnitID]
@@ -1942,6 +1943,10 @@ function widget:GameFrame(n)
                                 end
                             end
                         end
+
+                        -- TODO: if we're guarding a constructor who's idle, should we be considered idle, too?
+                        -- (We might be repairing the constructor even if we're not helping them build.
+                        -- Maybe consider us idle if the unit we're guarding is idle _and_ full-health.)
 
                         if builtUnitDefID then
 
@@ -3260,34 +3265,40 @@ end
 
 
 function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likely
-    local unitDef = UnitDefs[unitDefID]
+    -- TODO: can we get rid of cmdlist? Moving should count as non-idle for at least commanders, and perhaps other units too.
+    local unitExists = false
+    local active = false
     local builtUnitDefID = nil
-    if unitDef.isFactory then
-        -- The factory is active if it has at least one command.
-        local f = Spring.GetFactoryCommands(unitID, 1)
-        if #f > 0 then
-            -- A factory's first command should be a build command whose ID is the negative unitdef of what's being built.
-            if f[1].id < 0 then
-                builtUnitDefID = -f[1].id
-            end
-            return true, builtUnitDefID
-        end
+    local mayBeBuilding = false -- will remain false even if builtUnitDefID is non-nil
+    local guardedUnitID = nil -- returned in case we want to check for cycles of idle builders
+
+    local commands = nil
+    -- We only need one command to figure out if the unit is active.
+    -- TODO: Try GetUnitCurrentCommand
+    if UnitDefs[unitDefID].isFactory then
+        commands = Spring.GetFactoryCommands(unitID, 1)
     else
-        -- A unit is only active if at least one of its commands are in the command list.
-        local commands = Spring.GetUnitCommands(unitID, -1)
+        commands = Spring.GetUnitCommands(unitID, 1)
+    end
+
+    if commands then
+        unitExists = true
         for i = 1, #commands do
-            for _, relevantCMD in ipairs(cmdList) do
-                if commands[i].id == relevantCMD or commands[i].id < 0 then -- a negative command ID means we're building something
-                    if commands[i].id < 0 then
-                        -- We know exactly what this unit is building: a negative command ID is the negative unitdef of what's being built.
-                        --builtUnitDefID = -commands[i].id
-                    end
-                    return true, builtUnitDefID
-                end
+            active = true
+            if commands[i].id < 0 and not builtUnitDefID then
+                -- We're building something. A negative ID is the unitdef ID of what's being built.
+                builtUnitDefID = -commands[i].id
+                --Spring.Echo("unit " .. unitID .. " is building unitdef " .. builtUnitDefID)
+            elseif commands[i].id == CMD.GUARD then
+                mayBeBuilding = true -- building can be caused by a guard command
+                guardedUnitID = commands[i].params[1]
+            elseif commands[i].id == CMD.REPAIR then
+                mayBeBuilding = true -- building can be caused by a repair command
             end
         end
     end
-    return false, nil
+
+    return unitExists, active, builtUnitDefID, mayBeBuilding, guardedUnitID
 end
 
 function pid(Kp, Ki, Kd, dt, prevIntegral, prevError, setPoint, measuredValue)
