@@ -1,4 +1,4 @@
-local versionString = "version 0.1.6, modified 2024-02-09"
+local versionString = "version 0.1.7, modified 2024-02-11"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
