@@ -34,6 +34,7 @@ local config = {
     -- Buildpower bar: behavior tweaks to consider making permanent _or_ options
     includeConsBeingBuilt = true, -- should we count cons being built? If so, their BP will be considered reserved.
     countStalledAsIdle = false, -- should we consider stalled BP to be idle? If not, it'll be considered used.
+    guardingIdleBuilderCountsAsIdle = true, -- should builders guarding idle builders be considered idle themselves?
 
     -- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
     drawBPIndicators = true,
@@ -54,9 +55,9 @@ local OPTION_SPECS = {
         type = "bool",
     },
     {
-        configVariable = "includeFactories",
-        name = "include factories",
-        description = "Include factories in buildpower calculations (requires reload)",
+        configVariable = "countStalledAsIdle",
+        name = "count stalled buildpower as idle",
+        description = "Should stalled buildpower count as idle? (If not, it will count toward reserved buildpower.)",
         type = "bool",
     },
     {
@@ -1904,6 +1905,10 @@ function widget:GameFrame(n)
         -- We may have multiple constructors who are building the same unit. No need to call GetUnitDefID multiple times.
         local unitDefsBeingBuilt = {}
 
+        -- Guarding counts as idle if we're guarding an idle builder.
+        local builderStates = {}
+        local unitsReservedBP = {}
+
         for unitID, unitData in pairs(trackedBuilders) do --calculation of exact pull
             -- TODO: this is bugged:
             -- (1) pairs() doesn't iterate in a deterministic fashion.
@@ -1921,16 +1926,19 @@ function widget:GameFrame(n)
                     else
                         -- Units still being built count as reserved.
                         cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+                        unitsReservedBP[unitID] = currentUnitBP
                     end
                 else
                     local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
 
                     if not unitExists then
                         UntrackUnit(unitID)
-                    elseif foundActivity then
+                    elseif not foundActivity then
+                        builderStates[unitID] = { false, builtUnitDefID, guardedUnitID, currentUnitBP }
+                    else
 
                         -- Assume all of this unit's buildpower is reserved.
-                        local unitReservedBP = currentUnitBP
+                        unitsReservedBP[unitID] = currentUnitBP
 
                         -- This unit might be building, but we don't know what. See if it's building something.
                         if mayBeBuilding and not builtUnitDefID then
@@ -1944,6 +1952,8 @@ function widget:GameFrame(n)
                             end
                         end
 
+                        builderStates[unitID] = { true, builtUnitDefID, guardedUnitID, currentUnitBP }
+
                         -- TODO: if we're guarding a constructor who's idle, should we be considered idle, too?
                         -- (We might be repairing the constructor even if we're not helping them build.
                         -- Maybe consider us idle if the unit we're guarding is idle _and_ full-health.)
@@ -1954,7 +1964,7 @@ function widget:GameFrame(n)
                             usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
                             usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
-                            currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
+                            --currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
                             currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP -- everything costs at least 1 metal
                             buildingBP = buildingBP + currentUnitBP
 
@@ -1977,22 +1987,97 @@ function widget:GameFrame(n)
                             end
                             nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
 
-                            if currentlyUsedBP and currentlyUsedBP > 0 then
+                            if currentlyUsedBP and currentlyUsedBP >= 0 then
                                 cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
 
                                 -- This unit is building but might be stalled. Only count as reserved its BP which aren't stalled.
                                 if config.countStalledAsIdle then
-                                    unitReservedBP = currentlyUsedBP
+                                    unitsReservedBP[unitID] = currentlyUsedBP
                                 end
                             end
                         end
-                        cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
                     end
                 end
             end
             nowChecking = nowChecking + 1
             --Log("nowChecking new one" ..nowChecking)
         end
+
+
+        --
+        -- See if guarded units should be treated as idle because they're guarding an idle builder.
+        --
+
+        if config.guardingIdleBuilderCountsAsIdle then
+            --Spring.Echo("checking for idle guards")
+            local visited = {}
+            local builderIdle = {}
+
+            -- Should be O(n), as we'll only visit each node once.
+            for unitID, unitData in pairs(builderStates) do
+                --Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
+                if not visited[unitID] then
+                    isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
+
+                    -- Assume the stack is active until proven otherwise.
+                    local stackIsIdle = false
+
+                    visited[unitID] = true
+                    local maybeIdleStack = {}
+                    table.insert(maybeIdleStack, unitID)
+
+                    -- We're not building, but we're guarding. Figure out our state based on what the guarded unit is doing.
+                    while guardedUnitID do
+                        --Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
+                        builderIdle[unitID] = (guardedUnitID and not builtUnitDefID) -- assume _this unit_ is idle if it's guarding but not building
+                        if builtUnitDefID then
+                            -- We're building something.
+                            --Spring.Echo("  building something!")
+                            stackIsIdle = false
+                            break
+                        elseif not builderStates[guardedUnitID] then
+                            -- We're guarding a non-builder.
+                            --Spring.Echo("  guarding a non-builder")
+                            stackIsIdle = false
+                            break
+                        elseif visited[guardedUnitID] then
+                            -- We've already run into this unit before. Use its state.
+                            --Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
+                            stackIsIdle = builderIdle[guardedUnitID]
+                            break
+                        else
+                            -- We're not building, and we're guarding a builder. Recurse: see if that builder is idle.
+                            --Spring.Echo("  not building, guarding a builder -- recurse!")
+                            unitID = guardedUnitID
+                            visited[unitID] = true
+                            table.insert(maybeIdleStack, unitID)
+                            isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(builderStates[unitID])
+                            if not guardedUnitID then
+                                -- Finally, we're not guarding anything. Make our idle determination based on whether this unit is active.
+                                --Spring.Echo("  no longer guarding; active " .. tostring(isActive))
+                                stackIsIdle = not isActive
+                            end
+                        end
+                    end
+
+                    -- We've reached an end -- mark the whole stack of guarding builders appropriately.
+                    for i, unitID in ipairs(maybeIdleStack) do
+                        builderIdle[unitID] = stackIsIdle
+                        if stackIsIdle then
+                            -- This unit was ultimately guarding an idle builder, so mark it as idle, too.
+                            --Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
+                            unitsReservedBP[unitID] = 0
+                        end
+                    end
+                end
+            end
+        end
+
+        for unitID, unitReservedBP in pairs(unitsReservedBP) do
+            cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
+        end
+
+
         cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
         cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
         cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
