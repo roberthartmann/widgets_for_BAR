@@ -2019,10 +2019,9 @@ function widget:GameFrame(n)
                 if not visited[unitID] then
                     isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
 
-                    -- Assume the stack is active until proven otherwise.
-                    local stackIsIdle = false
-
                     visited[unitID] = true
+                    local stackIsIdle = not isActive
+                    builderIdle[unitID] = not isActive
                     local maybeIdleStack = {}
                     table.insert(maybeIdleStack, unitID)
 
