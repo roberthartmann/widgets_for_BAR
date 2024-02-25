@@ -1538,9 +1538,9 @@ local function updateResbar(res)  --decides where and what is drawn
             end
             if currentTooltipText ~= "" then
                 WG['tooltip'].AddTooltip(res .. '_Current', {
-                    resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2),
+                    resbarDrawinfo[res].textCurrent[2] - (resbarDrawinfo[res].textCurrent[4] * 2.5),
                     resbarDrawinfo[res].textCurrent[3],
-                    resbarDrawinfo[res].textCurrent[2] + (resbarDrawinfo[res].textCurrent[4] * 1),
+                    resbarDrawinfo[res].textCurrent[2] + (resbarDrawinfo[res].textCurrent[4] * 0.5),
                     resbarDrawinfo[res].textCurrent[3] + resbarDrawinfo[res].textCurrent[4]
                 }, currentTooltipText)
             else
