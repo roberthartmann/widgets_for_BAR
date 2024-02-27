@@ -1,4 +1,4 @@
-local versionString = "version 0.1.7, modified 2024-02-11"
+local versionString = "version 0.1.7, modified 2024-02-26"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
@@ -3457,13 +3457,13 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
                 BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
             end
         end
-    end
-    if trackedBuilders[unitID] then
-         trackedBuilders[unitID] = nil
-    end
-    if trackedWinds[unitID] then
-        trackedWinds[unitID] = nil
-        numWindGenerators = numWindGenerators - 1
+        if trackedBuilders[unitID] then
+             trackedBuilders[unitID] = nil
+        end
+        if trackedWinds[unitID] then
+            trackedWinds[unitID] = nil
+            numWindGenerators = numWindGenerators - 1
+        end
     end
 end
 --function removeBuildUnitFromBP(unitID)
