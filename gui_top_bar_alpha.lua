@@ -1,9 +1,9 @@
-local versionString = "version 0.1.7, modified 2024-02-26"
+local versionString = "version 0.1.7, modified 2024-08-26"
 function widget:GetInfo()
     return {
         name = "Top Bar with Buildpower",
         desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
-        author = "Floris and Floris and Floris and Robert82 and gmcnew",
+        author = "Floris, Robert82 and gmcnew",
         date = "Feb, 2017",
         license = "GNU GPL, v2 or later", 
         layer = -99980,
@@ -217,25 +217,25 @@ function initWeightedAverage(maxN)
         maxn = maxN,-- max number of elements
         i = 1, -- next index to write to
         curn = 0, -- current number of elements
-        sum_sw = 0, -- sum(sample*weight)
+        sum_vw = 0, -- sum(sample*weight)
         sum_w = 0, -- sum(weight)
-        s = {}, -- samples
+        v = {}, -- samples
         w = {}, -- weights
     }
 end
 
-function addSampleAndGetWeightedAverage(t, newSample, newWeight)
-    if newSample ~= nil then
+function addSampleAndGetWeightedAverage(t, newValue, newWeight)
+    if newValue ~= nil then
         if t.i <= t.curn then
             -- remove the old sample and weight
-            t.sum_sw = t.sum_sw - (t.s[t.i] * t.w[t.i])
+            t.sum_vw = t.sum_vw - (t.v[t.i] * t.w[t.i])
             t.sum_w = t.sum_w - t.w[t.i]
         end
 
         -- add the new sample and weight
-        t.s[t.i] = newSample
+        t.v[t.i] = newValue
         t.w[t.i] = newWeight
-        t.sum_sw = t.sum_sw + newSample * newWeight
+        t.sum_vw = t.sum_vw + newValue * newWeight
         t.sum_w = t.sum_w + newWeight
 
         -- update the table's size
@@ -254,7 +254,7 @@ function addSampleAndGetWeightedAverage(t, newSample, newWeight)
         return nil
     end
 
-    return t.sum_sw / t.sum_w
+    return t.sum_vw / t.sum_w
 end
 
 -- Lists of recent datapoints, used for smoothing. The first element is the number of datapoints to keep, the second is the datapoints themselves.
@@ -1466,7 +1466,7 @@ local function updateResbar(res)  --decides where and what is drawn
             if config.drawBPIndicators and BP['mSliderPosition'] ~= nil and BP['eSliderPosition'] ~= nil then
                 bpTooltipText = bpTooltipText .. "\n\n"
                     .. textColor .."If no builders were idle, your metal and energy income\n"
-                    .. textColor .."would support an estimated " .. highlightColor .. math_ceil(BP['mSliderPosition'] * 100) .. textColor .. "% and ".. highlightColor .. math_ceil(BP['eSliderPosition'] * 100) .. textColor .. "% of your BP\n"
+                    .. textColor .."would support an estimated " .. highlightColor .. math_ceil(BP['mSliderPosition'] * 100) .. textColor .. "% with metal and ".. highlightColor .. math_ceil(BP['eSliderPosition'] * 100) .. textColor .. "% with energy of your BP\n"
                     .. textColor .."(grey and yellow indicators on bar)."
             end
 
@@ -2180,15 +2180,24 @@ function widget:GameFrame(n)
                 local minSupportedBP = 0
 
                 if BP['metalExpensePerBP'] > 0 then
-                    BP['metalSupportedBP'] = (BP['metalIncome'] - metalExpenseMinusBuilders) / BP['metalExpensePerBP']
+                    BP['metalSupportedBP'] = BP['metalIncome'] / BP['metalExpenseIfAllBPUsed'] * totalBP
                     minSupportedBP = BP['metalSupportedBP']
                     bpRatioSupportedByMIncome = math_max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
                 end
 
                 if BP['energyExpensePerBP'] > 0 then
-                    BP['energySupportedBP'] = (BP['energyIncome'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
+                    BP['energySupportedBP'] = BP['energyIncome'] / BP['energyExpenseIfAllBPUsed'] * totalBP --ql
+                    Spring.Echo("E income" ..BP['energyIncome'])
+                    Spring.Echo("E demand from BP" ..BP['energyExpenseIfAllBPUsed'])
+                    Spring.Echo("energySupportedBP" ..BP['energySupportedBP'])
+                    Spring.Echo("totalBP" ..totalBP)
                     minSupportedBP = BP['energySupportedBP']
+
                     bpRatioSupportedByEIncome = math_max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
+                    Spring.Echo(".")
+                    Spring.Echo("bpRatioSupportedByEIncome" ..bpRatioSupportedByEIncome)
+                    Spring.Echo(".")
+
 
                     if config.drawBPWindRangeIndicators then
                         eSupportedBP_minWind = (BP['energyIncomeNoWind'] - energyExpenseMinusBuilders) / BP['energyExpensePerBP']
