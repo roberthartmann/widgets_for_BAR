@@ -21,21 +21,18 @@ If you are interested in this version follow the discussion in discord.
 ## Installation Guide
 
 ### Step 1: Download the Widget
-First, download the `gui_top_bar_supplyable_BP.lua` file from our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR/blob/main/gui_top_bar_supplyable_BP.lua).
+First, download the `gui_top_bar_supplyable_BP.lua` file from our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR/blob/main/gui_top_bar_alpha.lua).
 
 ### Step 2: Place the Widget File
 Place the downloaded file into your widgets folder. The path should be `your_bar_folder/data/luaui/widgets`.
 
-### Step 3: Download the Required Image
-Download the necessary image, `BP.png` and `triangle.png`, from [here](https://github.com/roberthartmann/widgets_for_BAR/blob/main/BP.png) and [here](https://github.com/roberthartmann/widgets_for_BAR/blob/main/triangle.png) and store it in the `Widgets/topbar` folder.
-
-### Step 4: Activate the Widget
+### Step 3: Activate the Widget
 Start a game, then press `F11` to access the widget menu. Filter for the top bar, deactivate the original top bar, and activate the new one.
 
-### Step 5: Adjust Other Widgets
+### Step 4: Adjust Other Widgets
 After activating the new top bar, reactivate any widgets that are positioned beside the top bar. They need to be readjusted to fit alongside the new top bar.
 
-### Step 6: Understanding the Widget
+### Step 5: Understanding the Widget
 To fully benefit from the widget, it's crucial to understand its functionalities. Refer to the pictures and descriptions in our repository to get a comprehensive understanding.
 
 Here is a picture for you to better understand how to read it.
