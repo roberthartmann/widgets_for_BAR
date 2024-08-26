@@ -29,7 +29,7 @@ To fully benefit from the widget, it's crucial to understand its functionalities
 Here is a picture for you to better understand how to read it.
 ![widget_explain](https://raw.githubusercontent.com/roberthartmann/widgets_for_BAR/main/readme_pics/simplified_BP_bar.png)
 
---## Understanding "Time You Are Behind"
+//## Understanding "Time You Are Behind"
 --The widget calculates how much you're lagging in utilizing your build power (BP) effectively:
 
 - **Calculation Logic**: It divides the total metal cost of unused build power by your current metal production.
