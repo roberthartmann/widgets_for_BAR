@@ -2187,16 +2187,9 @@ function widget:GameFrame(n)
 
                 if BP['energyExpensePerBP'] > 0 then
                     BP['energySupportedBP'] = BP['energyIncome'] / BP['energyExpenseIfAllBPUsed'] * totalBP --ql
-                    Spring.Echo("E income" ..BP['energyIncome'])
-                    Spring.Echo("E demand from BP" ..BP['energyExpenseIfAllBPUsed'])
-                    Spring.Echo("energySupportedBP" ..BP['energySupportedBP'])
-                    Spring.Echo("totalBP" ..totalBP)
                     minSupportedBP = BP['energySupportedBP']
-
                     bpRatioSupportedByEIncome = math_max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
-                    Spring.Echo(".")
-                    Spring.Echo("bpRatioSupportedByEIncome" ..bpRatioSupportedByEIncome)
-                    Spring.Echo(".")
+
 
 
                     if config.drawBPWindRangeIndicators then
