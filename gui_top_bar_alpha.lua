@@ -1,9 +1,9 @@
-local versionString = "version 0.1.7, modified 2024-08-26"
+local versionString = "version 0.1.7, modified 2024-02-26"
 function widget:GetInfo()
     return {
-        name = "Top Bar with Buildpower",
+        name = "Top Bar with Buildpower 1",
         desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
-        author = "Floris, Robert82 and gmcnew",
+        author = "Floris and Floris and Floris and Robert82 and gmcnew",
         date = "Feb, 2017",
         license = "GNU GPL, v2 or later", 
         layer = -99980,
@@ -1444,6 +1444,7 @@ local function updateResbar(res)  --decides where and what is drawn
             local totalAvailableBP = BP[4]
             local avgTotalUsedBP = math_round(BP[5])
 
+
             local reservedDesc = "(Reserved: in-use, walking to a job, or stalled.)"
             local idleDesc = " idle BP (red)."
             if config.includeConsBeingBuilt and config.countStalledAsIdle then
@@ -1930,13 +1931,11 @@ function widget:GameFrame(n)
                     end
                 else
                     local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-
                     if not unitExists then
                         UntrackUnit(unitID)
                     elseif not foundActivity then
                         builderStates[unitID] = { false, builtUnitDefID, guardedUnitID, currentUnitBP }
                     else
-
                         -- Assume all of this unit's buildpower is reserved.
                         unitsReservedBP[unitID] = currentUnitBP
 
@@ -2183,13 +2182,13 @@ function widget:GameFrame(n)
                     BP['metalSupportedBP'] = BP['metalIncome'] / BP['metalExpenseIfAllBPUsed'] * totalBP
                     minSupportedBP = BP['metalSupportedBP']
                     bpRatioSupportedByMIncome = math_max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
+                    --Spring.Echo("bpRatioSupportedByMIncome" ..bpRatioSupportedByMIncome)
                 end
 
                 if BP['energyExpensePerBP'] > 0 then
                     BP['energySupportedBP'] = BP['energyIncome'] / BP['energyExpenseIfAllBPUsed'] * totalBP --ql
                     minSupportedBP = BP['energySupportedBP']
                     bpRatioSupportedByEIncome = math_max(0, math_min(BP['energySupportedBP'] / totalBP, 1))
-
 
 
                     if config.drawBPWindRangeIndicators then
@@ -3364,22 +3363,26 @@ function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likel
     if UnitDefs[unitDefID].isFactory then
         commands = Spring.GetFactoryCommands(unitID, 1)
     else
-        commands = Spring.GetUnitCommands(unitID, 1)
+        commands = Spring.GetUnitCommands(unitID, -1)
     end
 
     if commands then
         unitExists = true
         for i = 1, #commands do
-            active = true
-            if commands[i].id < 0 and not builtUnitDefID then
-                -- We're building something. A negative ID is the unitdef ID of what's being built.
-                builtUnitDefID = -commands[i].id
-                --Spring.Echo("unit " .. unitID .. " is building unitdef " .. builtUnitDefID)
-            elseif commands[i].id == CMD.GUARD then
-                mayBeBuilding = true -- building can be caused by a guard command
-                guardedUnitID = commands[i].params[1]
-            elseif commands[i].id == CMD.REPAIR then
-                mayBeBuilding = true -- building can be caused by a repair command
+            for _, relevantCMD in ipairs(cmdList) do
+                if commands[i].id == relevantCMD or commands[i].id < 0 then
+                    active = true
+                    if commands[i].id < 0 and not builtUnitDefID then
+                        -- We're building something. A negative ID is the unitdef ID of what's being built.
+                        builtUnitDefID = -commands[i].id
+                        --Spring.Echo("unit " .. unitID .. " is building unitdef " .. builtUnitDefID)
+                    elseif commands[i].id == CMD.GUARD then
+                        mayBeBuilding = true -- building can be caused by a guard command
+                        guardedUnitID = commands[i].params[1]
+                    elseif commands[i].id == CMD.REPAIR then
+                        mayBeBuilding = true -- building can be caused by a repair command
+                    end
+                end
             end
         end
     end
