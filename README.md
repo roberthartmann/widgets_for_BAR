@@ -7,16 +7,7 @@ Enhance your gaming experience with the new top bar widget for BAR (Beyond All R
 - **Time You Are Behind Calculation**: Instantly know how efficiently you're using your build power (BP).
 
 ## Versions
-`gui_top_bar_supplyable_BP.lua` is the one that is described here, it is stable :)
-
-`gui_top_bar_sup_BP_clean.lua` gets rid of most numbers
-
-`gui_top_bar_alpha.lua` 
-is a test version. Its appearance will be changed frequently and drasically.
-If you are interested in this version follow the discussion in discord. 
-
-`gui_top_bar_2.0.lua` Is an old version. It can get unstable after many hours of huge games.
-
+`gui_top_bar_alpha.lua` is the one that is described here, it is stable :)
 
 ## Installation Guide
 
