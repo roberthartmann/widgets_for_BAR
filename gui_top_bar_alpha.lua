@@ -1535,7 +1535,7 @@ local function updateResbar(res)  --decides where and what is drawn
                     end
                 end
             elseif BP[4] > 0 then
-                currentTooltipText = textColor .. "You are using " .. highlightColor .. math_min(100, math_round(BP[3] * 100 / BP[4])) .. textColor .. "% of your buildpower."
+                currentTooltipText = textColor .. "You are using " .. highlightColor .. math_min(100, math_round(BP[5] * 100 / BP[4])) .. textColor .. "% of your buildpower."
             end
             if currentTooltipText ~= "" then
                 WG['tooltip'].AddTooltip(res .. '_Current', {
@@ -1673,7 +1673,7 @@ local function drawResbarValues(res, updateText) --drawing the bar itself and va
                     -- Should we show surplus BP, or percent-reserved?
                     if (not config.proMode) then
                         if BP[4] > 0 then
-                            currentResValue[res] = math_min(100, math_round(BP[3] * 100 / BP[4]))
+                            currentResValue[res] = math_min(100, math_round(BP[5] * 100 / BP[4]))
                             if     currentResValue[res] < 40 then bpCurrentColor = { 0.82, 0.39, 0.39, 1.0 } --Red
                             elseif currentResValue[res] < 60 then bpCurrentColor = { 1.0,  0.39, 0.39, 1.0 } --Orange
                             elseif currentResValue[res] < 80 then bpCurrentColor = { 1.0,  1.0,  0.39, 1.0 } --Yellow
