@@ -2045,13 +2045,13 @@ function widget:GameFrame(n)
         --
 
         if config.guardingIdleBuilderCountsAsIdle then
-            Spring.Echo("checking for idle guards")
+            --Spring.Echo("checking for idle guards")
             local visited = {}
             local builderIdle = {}
 
             -- Should be O(n), as we'll only visit each node once.
             for unitID, unitData in pairs(builderStates) do
-                Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
+                --Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
                 if not visited[unitID] then
                     isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
 
@@ -2063,33 +2063,33 @@ function widget:GameFrame(n)
 
                     -- We're not building, but we're guarding. Figure out our state based on what the guarded unit is doing.
                     while guardedUnitID do
-                        Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
+                        --Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
                         builderIdle[unitID] = (guardedUnitID and not builtUnitDefID) -- assume _this unit_ is idle if it's guarding but not building
                         if builtUnitDefID then
                             -- We're building something.
-                            Spring.Echo("  building something!")
+                            --Spring.Echo("  building something!")
                             stackIsIdle = false
                             break
                         elseif not builderStates[guardedUnitID] then
                             -- We're guarding a non-builder.
-                            Spring.Echo("  guarding a non-builder")
+                            --Spring.Echo("  guarding a non-builder")
                             stackIsIdle = false
                             break
                         elseif visited[guardedUnitID] then
                             -- We've already run into this unit before. Use its state.
-                            Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
+                            --Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
                             stackIsIdle = builderIdle[guardedUnitID]
                             break
                         else
                             -- We're not building, and we're guarding a builder. Recurse: see if that builder is idle.
-                            Spring.Echo("  not building, guarding a builder -- recurse!")
+                            --Spring.Echo("  not building, guarding a builder -- recurse!")
                             unitID = guardedUnitID
                             visited[unitID] = true
                             table.insert(maybeIdleStack, unitID)
                             isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(builderStates[unitID])
                             if not guardedUnitID then
                                 -- Finally, we're not guarding anything. Make our idle determination based on whether this unit is active.
-                                Spring.Echo("  no longer guarding; active " .. tostring(isActive))
+                                --Spring.Echo("  no longer guarding; active " .. tostring(isActive))
                                 stackIsIdle = not isActive
                             end
                         end
@@ -2100,7 +2100,7 @@ function widget:GameFrame(n)
                         builderIdle[unitID] = stackIsIdle
                         if stackIsIdle then
                             -- This unit was ultimately guarding an idle builder, so mark it as idle, too.
-                            Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
+                            --Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
                             unitsReservedBP[unitID] = 0
                         end
                     end
@@ -2219,7 +2219,7 @@ function widget:GameFrame(n)
                     BP['metalSupportedBP'] = BP['metalIncome'] / BP['metalExpenseIfAllBPUsed'] * totalBP
                     minSupportedBP = BP['metalSupportedBP']
                     bpRatioSupportedByMIncome = math_max(0, math_min(BP['metalSupportedBP'] / totalBP, 1))
-                    Spring.Echo("bpRatioSupportedByMIncome" ..bpRatioSupportedByMIncome)
+                    --Spring.Echo("bpRatioSupportedByMIncome" ..bpRatioSupportedByMIncome)
                 end
 
                 if BP['energyExpensePerBP'] > 0 then
