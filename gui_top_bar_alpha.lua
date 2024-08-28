@@ -1,9 +1,9 @@
-local versionString = "version 0.1.7, modified 2024-02-26"
+local versionString = "version 0.1.7, modified 2024-02-28"
 function widget:GetInfo()
 	return {
 		name = "Top Bar with Buildpower 1",
 		desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
-		author = "Floris and Floris and Floris and Robert82 and gmcnew",
+		author = "Floris, Robert82 and McDoodle ",
 		date = "Feb, 2017",
 		license = "GNU GPL, v2 or later", 
 		layer = -99980,
@@ -11,9 +11,15 @@ function widget:GetInfo()
 		handler = true, --can use widgetHandler:x()
 	}
 end
-local Debugmode = false
+
 function Log(Message)
 	if Debugmode==true then
+		Spring.Echo(Message)
+	end
+end
+local DebugmodeFrame = true
+function LogFrame(Message)
+	if DebugmodeFrame==true then
 		Spring.Echo(Message)
 	end
 end
@@ -1917,7 +1923,7 @@ local unitIter = unitIterator(trackedBuilders)
 local unitIterator
 
 function widget:GameFrame(n)
-	Log("n " .. n)
+	LogFrame("n " .. n)
 	spec = spGetSpectatingState()
 
 	local bladeSpeedMultiplier = 0.2
@@ -1925,20 +1931,20 @@ function widget:GameFrame(n)
 	gameFrame = n
 
 	-- calculations for the exact metal and energy draw value
-	Log("cache - entering GameFrame")
+	LogFrame("cache - entering GameFrame")
 	local gameFrameFreq = 2 -- TODO: get this to 1
 	local unp = unpack or table.unpack
-	Log("gameFrame: " .. gameFrame .. ", gameFrameFreq: " .. gameFrameFreq .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase .. ", trackedNum: " .. trackedNum)
+	LogFrame("gameFrame: " .. gameFrame .. ", gameFrameFreq: " .. gameFrameFreq .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase .. ", trackedNum: " .. trackedNum)
 
 	-- If we're supposed to draw the buildpower bar, do some calculations.
 	-- Skip frames between calculations _unless_ we have too many builders to do them all in one frame, in which case nowChecking will be positive when the previous frame didn't finish.
 	if config.drawBPBar and ((gameFrame % gameFrameFreq == 0) or nowChecking > 0) then
 		gameStarted = true -- TODO: is this needed?
-		Log("Processing BPBar calculations")
+		LogFrame("Processing BPBar calculations")
 
 		-- Log initial cache values
-		Log("Initial cacheTotalStallingM: " .. tostring(cacheTotalStallingM))
-		Log("Initial cacheTotalStallingE: " .. tostring(cacheTotalStallingE))
+		LogFrame("Initial cacheTotalStallingM: " .. tostring(cacheTotalStallingM))
+		LogFrame("Initial cacheTotalStallingE: " .. tostring(cacheTotalStallingE))
 		local cacheTotalStallingM = 0
 		local cacheTotalStallingE = 0
 
@@ -1954,7 +1960,7 @@ function widget:GameFrame(n)
 		local builderStates = {}
 		local unitsReservedBP = {}
 
-		Log("Starting trackedBuilders loop")
+		LogFrame("Starting trackedBuilders loop")
 
 		-- Initialisieren des unitIterator, falls dies der erste Frame ist oder die Coroutine beendet ist
 		if not unitIterator or coroutine.status(unitIterator) == "dead" then
@@ -1972,176 +1978,175 @@ function widget:GameFrame(n)
 				break -- Keine weiteren Einheiten mehr zum Verarbeiten oder Fehler
 			end
 
-			Log("Processing unitID: " .. tostring(unitID) .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase)
+			LogFrame("Processing unitID: " .. tostring(unitID) .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase)
 			local currentUnitBP, unitIsBuilt, unitDefID, unitTeamID = unp(unitData)
+			--if not unitIsBuilt then
+			--	local isDead = Spring.GetUnitIsDead(unitID)
+			--	LogFrame("Unit is not built, performing additional checks")
+			--	LogFrame("Unit is not built. isDead: " .. tostring(isDead))
+			--	
+			--	if isDead ~= false then -- unit is dead _or_ nonexistent
+			--		LogFrame("Unit is dead or nonexistent, untracking unitID: " .. unitID)
+			--		
+			--		UntrackUnit(unitID, unitDefID, unitTeamID)
+			--	else
+			--		LogFrame("Unit is not dead, updating cacheTotalReservedBP")
+			--		
+			--		-- Units still being built count as reserved.
+			--		cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
+			--		unitsReservedBP[unitID] = currentUnitBP
+			--	end
+			--else
+			LogFrame("Unit is built, performing additional checks")
+			local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
+			LogFrame("Unit exists: " .. tostring(unitExists) .. ", foundActivity: " .. tostring(foundActivity) .. ", builtUnitDefID: " .. tostring(builtUnitDefID) .. ", mayBeBuilding: " .. tostring(mayBeBuilding) .. ", guardedUnitID: " .. tostring(guardedUnitID))
 
-			if not unitIsBuilt then
-				local isDead = Spring.GetUnitIsDead(unitID)
-				Log("Unit is not built, performing additional checks")
-				Log("Unit is not built. isDead: " .. tostring(isDead))
+			if not unitExists then
+				LogFrame("Unit no longer exists, untracking unitID: " .. unitID)
 				
-				if isDead ~= false then -- unit is dead _or_ nonexistent
-					Log("Unit is dead or nonexistent, untracking unitID: " .. unitID)
-					
-					UntrackUnit(unitID, unitDefID, unitTeamID)
-				else
-					Log("Unit is not dead, updating cacheTotalReservedBP")
-					
-					-- Units still being built count as reserved.
-					cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
-					unitsReservedBP[unitID] = currentUnitBP
-				end
+				UntrackUnit(unitID)
+			elseif not foundActivity then
+				LogFrame("Unit not found doing any activity, marking as idle")
+				
+				builderStates[unitID] = { false, builtUnitDefID, guardedUnitID, currentUnitBP }
 			else
-				Log("Unit is built, performing additional checks")
-				local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-				Log("Unit exists: " .. tostring(unitExists) .. ", foundActivity: " .. tostring(foundActivity) .. ", builtUnitDefID: " .. tostring(builtUnitDefID) .. ", mayBeBuilding: " .. tostring(mayBeBuilding) .. ", guardedUnitID: " .. tostring(guardedUnitID))
-
-				if not unitExists then
-					Log("Unit no longer exists, untracking unitID: " .. unitID)
-					
-					UntrackUnit(unitID)
-				elseif not foundActivity then
-					Log("Unit not found doing any activity, marking as idle")
-					
-					builderStates[unitID] = { false, builtUnitDefID, guardedUnitID, currentUnitBP }
-				else
-					Log("Unit is active, processing buildpower calculations")
-					
-					-- Assume all of this unit's buildpower is reserved.
-					unitsReservedBP[unitID] = currentUnitBP
-
-					-- This unit might be building, but we don't know what. See if it's building something.
-					if mayBeBuilding and not builtUnitDefID then
-						local builtUnitID = spGetUnitIsBuilding(unitID)
-						if builtUnitID ~= nil then
-							builtUnitDefID = unitDefsBeingBuilt[builtUnitID]
-							if builtUnitDefID == nil then
-								builtUnitDefID = spGetUnitDefID(builtUnitID)
-								unitDefsBeingBuilt[builtUnitID] = builtUnitDefID
-							end
+				LogFrame("Unit is active, processing buildpower calculations")
+				
+				-- Assume all of this unit's buildpower is reserved.
+				unitsReservedBP[unitID] = currentUnitBP
+				LogFrame("unitID  " ..tostring(unitID))
+				LogFrame("unitsReservedBP[unitID]  " ..tostring(unitsReservedBP[unitID]))
+				-- This unit might be building, but we don't know what. See if it's building something.
+				if mayBeBuilding and not builtUnitDefID then
+					local builtUnitID = spGetUnitIsBuilding(unitID)
+					if builtUnitID ~= nil then
+						builtUnitDefID = unitDefsBeingBuilt[builtUnitID]
+						if builtUnitDefID == nil then
+							builtUnitDefID = spGetUnitDefID(builtUnitID)
+							unitDefsBeingBuilt[builtUnitID] = builtUnitDefID
 						end
 					end
+				end
 
-					builderStates[unitID] = { true, builtUnitDefID, guardedUnitID, currentUnitBP }
+				builderStates[unitID] = { true, builtUnitDefID, guardedUnitID, currentUnitBP }
 
-					-- TODO: if we're guarding a constructor who's idle, should we be considered idle, too?
-					-- (We might be repairing the constructor even if we're not helping them build.
-					-- Maybe consider us idle if the unit we're guarding is idle _and_ full-health.)
+				-- TODO: if we're guarding a constructor who's idle, should we be considered idle, too?
+				-- (We might be repairing the constructor even if we're not helping them build.
+				-- Maybe consider us idle if the unit we're guarding is idle _and_ full-health.)
 
-					if builtUnitDefID then
+				if builtUnitDefID then
 
-						local _, currentlyUsedM, _, currentlyUsedE = spGetUnitResources(unitID)
-						usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
-						usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
+					local _, currentlyUsedM, _, currentlyUsedE = spGetUnitResources(unitID)
+					usedBPMetalExpense = usedBPMetalExpense + currentlyUsedM
+					usedBPEnergyExpense = usedBPEnergyExpense + currentlyUsedE -- A builder may be cloaked, but not while it's building
 
-						--currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
-						currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP -- everything costs at least 1 metal
-						buildingBP = buildingBP + currentUnitBP
+					--currentlyUsedBP = (Spring.GetUnitCurrentBuildPower(unitID) or 0) * currentUnitBP
+					currentlyUsedBP = currentlyUsedM / unitCostData[builtUnitDefID].MperBP -- everything costs at least 1 metal
+					buildingBP = buildingBP + currentUnitBP
 
-						local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
-						local currentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
+					local currentlyWantedM = unitCostData[builtUnitDefID].MperBP * currentUnitBP
+					local currentlyWantedE = unitCostData[builtUnitDefID].EperBP * currentUnitBP
 
-						-- Low-priority units don't have their pulled M/E reported correctly.
-						if checkPriority(unitID) == "low" then
-							cacheTotalStallingM = cacheTotalStallingM + currentlyWantedM - currentlyUsedM
-							cacheTotalStallingE = cacheTotalStallingE + currentlyWantedE - currentlyUsedE
-						end
+					-- Low-priority units don't have their pulled M/E reported correctly.
+					if checkPriority(unitID) == "low" then
+						cacheTotalStallingM = cacheTotalStallingM + currentlyWantedM - currentlyUsedM
+						cacheTotalStallingE = cacheTotalStallingE + currentlyWantedE - currentlyUsedE
+					end
 
-						local nonStalledRateM = 1
-						local nonStalledRateE = 1
-						if currentlyWantedM > 0 then
-							nonStalledRateM = currentlyUsedM / currentlyWantedM
-						end
-						if currentlyWantedE > 0 then
-							nonStalledRateE = currentlyUsedE / currentlyWantedE
-						end
-						nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
+					local nonStalledRateM = 1
+					local nonStalledRateE = 1
+					if currentlyWantedM > 0 then
+						nonStalledRateM = currentlyUsedM / currentlyWantedM
+					end
+					if currentlyWantedE > 0 then
+						nonStalledRateE = currentlyUsedE / currentlyWantedE
+					end
+					nonStalledBuildingBP = nonStalledBuildingBP + currentUnitBP * math_min(nonStalledRateM, nonStalledRateE)
 
-						if currentlyUsedBP and currentlyUsedBP >= 0 then
-							cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
+					if currentlyUsedBP and currentlyUsedBP >= 0 then
+						cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
 
-							-- This unit is building but might be stalled. Only count as reserved its BP which aren't stalled.
-							if config.countStalledAsIdle then
-								unitsReservedBP[unitID] = currentlyUsedBP
-							end
-						end
+						-- This unit is building but might be stalled. Only count as reserved its BP which aren't stalled.
+	--					if config.countStalledAsIdle then
+	--						unitsReservedBP[unitID] = currentlyUsedBP
+	--					end
 					end
 				end
 			end
+			--end
 			nowChecking = nowChecking + 1
-			Log("Incremented nowChecking: " .. nowChecking)
-			--Log("nowChecking new one" ..nowChecking)
+			LogFrame("Incremented nowChecking: " .. nowChecking)
+			--LogFrame("nowChecking new one" ..nowChecking)
 		end
 
-		Log("Finished trackedBuilders loop")
+		LogFrame("Finished trackedBuilders loop")
 		--
 		-- See if guarded units should be treated as idle because they're guarding an idle builder.
 		--
-
-		if config.guardingIdleBuilderCountsAsIdle then
-			--Spring.Echo("checking for idle guards")
-			local visited = {}
-			local builderIdle = {}
-
+		--
+		--if config.guardingIdleBuilderCountsAsIdle then
+		--	--Spring.Echo("checking for idle guards")
+		--	local visited = {}
+		--	local builderIdle = {}
+		--
 			-- Should be O(n), as we'll only visit each node once.
-			for unitID, unitData in pairs(builderStates) do
-				--Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
-				if not visited[unitID] then
-					isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
-
-					visited[unitID] = true
-					local stackIsIdle = not isActive
-					builderIdle[unitID] = not isActive
-					local maybeIdleStack = {}
-					table.insert(maybeIdleStack, unitID)
-
-					-- We're not building, but we're guarding. Figure out our state based on what the guarded unit is doing.
-					while guardedUnitID do
-						--Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
-						builderIdle[unitID] = (guardedUnitID and not builtUnitDefID) -- assume _this unit_ is idle if it's guarding but not building
-						if builtUnitDefID then
-							-- We're building something.
-							--Spring.Echo("  building something!")
-							stackIsIdle = false
-							break
-						elseif not builderStates[guardedUnitID] then
-							-- We're guarding a non-builder.
-							--Spring.Echo("  guarding a non-builder")
-							stackIsIdle = false
-							break
-						elseif visited[guardedUnitID] then
-							-- We've already run into this unit before. Use its state.
-							--Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
-							stackIsIdle = builderIdle[guardedUnitID]
-							break
-						else
-							-- We're not building, and we're guarding a builder. Recurse: see if that builder is idle.
-							--Spring.Echo("  not building, guarding a builder -- recurse!")
-							unitID = guardedUnitID
-							visited[unitID] = true
-							table.insert(maybeIdleStack, unitID)
-							isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(builderStates[unitID])
-							if not guardedUnitID then
-								-- Finally, we're not guarding anything. Make our idle determination based on whether this unit is active.
-								--Spring.Echo("  no longer guarding; active " .. tostring(isActive))
-								stackIsIdle = not isActive
-							end
-						end
-					end
-
-					-- We've reached an end -- mark the whole stack of guarding builders appropriately.
-					for i, unitID in ipairs(maybeIdleStack) do
-						builderIdle[unitID] = stackIsIdle
-						if stackIsIdle then
-							-- This unit was ultimately guarding an idle builder, so mark it as idle, too.
-							--Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
-							unitsReservedBP[unitID] = 0
-						end
-					end
-				end
-			end
-		end
-
+		--	for unitID, unitData in pairs(builderStates) do
+		--		--Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
+		--		if not visited[unitID] then
+		--			isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
+		--
+		--			visited[unitID] = true
+		--			local stackIsIdle = not isActive
+		--			builderIdle[unitID] = not isActive
+		--			local maybeIdleStack = {}
+		--			table.insert(maybeIdleStack, unitID)
+		--
+		--			-- We're not building, but we're guarding. Figure out our state based on what the guarded unit is doing.
+		--			while guardedUnitID do
+		--				--Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
+		--				builderIdle[unitID] = (guardedUnitID and not builtUnitDefID) -- assume _this unit_ is idle if it's guarding but not building
+		--				if builtUnitDefID then
+		--					-- We're building something.
+		--					--Spring.Echo("  building something!")
+		--					stackIsIdle = false
+		--					break
+		--				elseif not builderStates[guardedUnitID] then
+		--					-- We're guarding a non-builder.
+		--					--Spring.Echo("  guarding a non-builder")
+		--					stackIsIdle = false
+		--					break
+		--				elseif visited[guardedUnitID] then
+		--					-- We've already run into this unit before. Use its state.
+		--					--Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
+		--					stackIsIdle = builderIdle[guardedUnitID]
+		--					break
+		--				else
+		--					-- We're not building, and we're guarding a builder. Recurse: see if that builder is idle.
+		--					--Spring.Echo("  not building, guarding a builder -- recurse!")
+		--					unitID = guardedUnitID
+		--					visited[unitID] = true
+		--					table.insert(maybeIdleStack, unitID)
+		--					isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(builderStates[unitID])
+		--					if not guardedUnitID then
+		--						-- Finally, we're not guarding anything. Make our idle determination based on whether this unit is active.
+		--						--Spring.Echo("  no longer guarding; active " .. tostring(isActive))
+		--						stackIsIdle = not isActive
+		--					end
+		--				end
+		--			end
+		--
+		--			-- We've reached an end -- mark the whole stack of guarding builders appropriately.
+		--			for i, unitID in ipairs(maybeIdleStack) do
+		--				builderIdle[unitID] = stackIsIdle
+		--				if stackIsIdle then
+		--					-- This unit was ultimately guarding an idle builder, so mark it as idle, too.
+		--					--Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
+		--					unitsReservedBP[unitID] = 0
+		--				end
+		--			end
+		--		end
+		--	end
+		--end
 		for unitID, unitReservedBP in pairs(unitsReservedBP) do
 			cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
 		end
@@ -2179,7 +2184,7 @@ function widget:GameFrame(n)
 		end
 
 		trackPosBase = trackPosBase + unitsPerFrame
-		Log("trackPosBase-----------------" ..trackPosBase)
+		LogFrame("trackPosBase-----------------" ..trackPosBase)
 	end
 
 	-- If enough frames have passed that we've calculated BP data for all builders, we can present this datapoint to the user.
@@ -2312,8 +2317,8 @@ function widget:GameFrame(n)
 		cacheDataBase[7] = 0
 		nowChecking = 0
 	end
-	Log("Finished GameFrame processing")
-	Log("GameFrame(n)")
+	LogFrame("Finished GameFrame processing")
+	LogFrame("GameFrame(n)")
 end
 
 
@@ -3229,10 +3234,10 @@ function widget:PlayerChanged()
 end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam)
-	TrackUnit(unitID, unitDefID, unitTeam, false)
-	if not isCommander[unitDefID] then
-		return
-	end
+	--TrackUnit(unitID, unitDefID, unitTeam, false)
+	--if not isCommander[unitDefID] then
+	--	return
+	--end
 	--record com created
 	if select(6, Spring.GetTeamInfo(unitTeam, false)) == myAllyTeamID then
 		allyComs = allyComs + 1
