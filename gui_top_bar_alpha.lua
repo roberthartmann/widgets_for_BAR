@@ -17,7 +17,7 @@ function Log(Message)
 		Spring.Echo(Message)
 	end
 end
-local DebugmodeFrame = true
+local DebugmodeFrame = false
 function LogFrame(Message)
 	if DebugmodeFrame==true then
 		Spring.Echo(Message)
@@ -31,15 +31,12 @@ end
 -- for bp bar only
 local config = {
 	metalCostForCommander = 1250,
-	includeFactories = true,
 	proMode = false,
 	drawBPBar = true,
 	autoHideButtons = false,
 	debugTooltip = false,
 
 	-- Buildpower bar: behavior tweaks to consider making permanent _or_ options
-	includeConsBeingBuilt = true, -- should we count cons being built? If so, their BP will be considered reserved.
-	countStalledAsIdle = false, -- should we consider stalled BP to be idle? If not, it'll be considered used.
 	guardingIdleBuilderCountsAsIdle = true, -- should builders guarding idle builders be considered idle themselves?
 
 	-- Show markers on the buildpower bar that indicate how much buildpower our metal and energy income could support.
@@ -58,12 +55,6 @@ local OPTION_SPECS = {
 		configVariable = "drawBPBar",
 		name = "buildpower bar",
 		description = "Draw the buildpower bar (requires reload)",
-		type = "bool",
-	},
-	{
-		configVariable = "countStalledAsIdle",
-		name = "count stalled buildpower as idle",
-		description = "Should stalled buildpower count as idle? (If not, it will count toward reserved buildpower.)",
 		type = "bool",
 	},
 	{
@@ -1479,14 +1470,6 @@ local function updateResbar(res)  --decides where and what is drawn
 
 			local reservedDesc = "(Reserved: in-use, walking to a job, or stalled.)"
 			local idleDesc = " idle BP (red)."
-			if config.includeConsBeingBuilt and config.countStalledAsIdle then
-				reservedDesc = "(Reserved: being built, in-use, or walking to a job.)"
-				idleDesc = " idle BP (red), including stalled BP."
-			elseif config.includeConsBeingBuilt then
-				reservedDesc = "(Reserved: being built, in-use, walking to a job, or stalled.)"
-			elseif config.countStalledAsIdle then
-				idleDesc = " idle BP (red), including stalled BP."
-			end
 
 			--WG['tooltip'].RemoveTooltip(res .. '_all')
 			local bpTooltipTitle = "Buildpower"
@@ -3354,32 +3337,27 @@ function TrackUnit(unitID, unitDefID, unitTeam, isBuilt) -- needed for exact cal
 		local health, maxHealth, paralyzeDamage, capture, build = Spring.GetUnitHealth(unitID)
 		isBuilt = build >= 1
 	end
-	if (not config.includeConsBeingBuilt) and (not isBuilt) then
-		return
-	end
 	local unitDef = UnitDefs[unitDefID]
 	if (myTeamID == unitTeam) and unitDef then
-		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist or UnitDefs[unitDefID].isFactory then
 			-- is factory is needed for bp bar only (switch metal cost on/off)
-			if unitDef.isFactory == false or config.includeFactories then
-				trackedNum = trackedNum + 1
-				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
-				local currentUnitMetalCost = 100
-				if UnitDefs[unitDefID].metalCost ~= nil then
-					currentUnitMetalCost = UnitDefs[unitDefID].metalCost
-				end
-				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
-				if unitName == "armcom" or unitName == "corcom" then
-					currentUnitMetalCost = config.metalCostForCommander
-				end
-
-				-- We may have already tracked this unit when it started being built. No need to add its BP again.
-				if not trackedBuilders[unitID] then
-					BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-					BP[4] = BP[4] + unitDef.buildSpeed -- BP[4] ^= totalAvailableBP
-				end
-				trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt, unitDefID, unitTeam }
+			trackedNum = trackedNum + 1
+			local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
+			local currentUnitMetalCost = 100
+			if UnitDefs[unitDefID].metalCost ~= nil then
+				currentUnitMetalCost = UnitDefs[unitDefID].metalCost
 			end
+			local unitName = UnitDefs[unitDefID].name -- Cost of Comms
+			if unitName == "armcom" or unitName == "corcom" then
+				currentUnitMetalCost = config.metalCostForCommander
+			end
+
+			-- We may have already tracked this unit when it started being built. No need to add its BP again.
+			if not trackedBuilders[unitID] then
+				BP[2] = BP[2] + currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
+				BP[4] = BP[4] + unitDef.buildSpeed -- BP[4] ^= totalAvailableBP
+			end
+			trackedBuilders[unitID] = { unitDef.buildSpeed, isBuilt, unitDefID, unitTeam }
 		elseif isBuilt and (unitDef.name == "armwin" or unitDef.name == "corwin") then -- wind generator
 			trackedWinds[unitID] = 1
 			numWindGenerators = numWindGenerators + 1
@@ -3390,22 +3368,20 @@ end
 function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculations
 	local unitDef = UnitDefs[unitDefID]
 	if (myTeamID == unitTeam) and unitDef then
-		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist then
+		if unitDef.buildSpeed and unitDef.buildSpeed > 0 and unitDef.canAssist or UnitDefs[unitDefID].isFactory then
 			-- is factory is needed for bp bar only (switch metal cost on/off)
-			if unitDef.isFactory == false or config.includeFactories then
-				trackedNum = trackedNum - 1
-				local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
-				local currentUnitMetalCost = 100
-				if UnitDefs[unitDefID].metalCost ~= nil then
-					currentUnitMetalCost = UnitDefs[unitDefID].metalCost
-				end
-				local unitName = UnitDefs[unitDefID].name -- Cost of Comms
-				if unitName == "armcom" or unitName == "corcom" then
-					currentUnitMetalCost = config.metalCostForCommander
-				end
-				BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
-				BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
+			trackedNum = trackedNum - 1
+			local unitDefID = Spring.GetUnitDefID(unitID) --handling metal cost
+			local currentUnitMetalCost = 100
+			if UnitDefs[unitDefID].metalCost ~= nil then
+				currentUnitMetalCost = UnitDefs[unitDefID].metalCost
 			end
+			local unitName = UnitDefs[unitDefID].name -- Cost of Comms
+			if unitName == "armcom" or unitName == "corcom" then
+				currentUnitMetalCost = config.metalCostForCommander
+			end
+			BP[2] = BP[2] - currentUnitMetalCost --BP[2] ^= totalMetalCostOfBuilders
+			BP[4] = BP[4] - trackedBuilders[unitID][1] -- BP[4] ^= totalAvailableBP
 		end
 		if trackedBuilders[unitID] then
 			 trackedBuilders[unitID] = nil
