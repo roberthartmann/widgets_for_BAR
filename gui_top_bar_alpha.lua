@@ -265,8 +265,8 @@ BP['energyExpense'] = 0 -- wird zumindest für wind verwendet ql
 -- Lists of recent datapoints, used for smoothing. The first element is the number of datapoints to keep, the second is the datapoints themselves.
 BP['history_usedBP'] = initWeightedAverage(30) -- used to calculate the average used BP
 BP['history_reservedBP'] = initWeightedAverage(30) -- used to calculate the average reserved BP
-BP['history_nonBuilderMetalExpense'] = initWeightedAverage(100) -- average metal expense from non-builders
-BP['history_nonBuilderEnergyExpense'] = initWeightedAverage(100) -- average energy expense from non-builders
+BP['history_nonBuilderMetalExpense'] = initWeightedAverage(30) -- average metal expense from non-builders
+BP['history_nonBuilderEnergyExpense'] = initWeightedAverage(30) -- average energy expense from non-builders
 BP['history_mSliderPosition'] = initWeightedAverage(30) -- average metal expense from non-builders
 
 -- How much of our buildpower can be supported by our energy income, expressed as a ratio from 0 to 1?
@@ -1467,23 +1467,27 @@ local function updateResbar(res)  --decides where and what is drawn
 			local totalAvailableBP = BP[4]
 			local avgTotalUsedBP = math_round(BP[5])
 
+			-- Berechnung der Prozentsätze
+			local percentAssigned = math.floor((avgTotalReservedBP / totalAvailableBP * 100) + 0.5)
+			local percentActive = math.floor((avgTotalUsedBP / totalAvailableBP * 100) + 0.5)
+			local percentIdle = math.floor(((totalAvailableBP - avgTotalReservedBP) / totalAvailableBP * 100) + 0.5)
 
-			local reservedDesc = "(Reserved: in-use, walking to a job, or stalled.)"
-			local idleDesc = " idle BP (red)."
+			-- Formatieren der Prozentzahlen mit führenden Leerzeichen für Ausrichtung
+			local formattedAssigned = string.format("%3d", percentAssigned) .. "%"
+			local formattedActive = string.format("%3d", percentActive) .. "%"
+			local formattedIdle = string.format("%3d", percentIdle) .. "%"
 
-			--WG['tooltip'].RemoveTooltip(res .. '_all')
-			local bpTooltipTitle = "Buildpower"
-			local bpTooltipText = textColor .. "You have a total of " .. highlightColor .. totalAvailableBP .. textColor .. " buildpower (BP).\n"
-				.. textColor .. "You are using " .. highlightColor .. avgTotalUsedBP .. textColor .. " BP (green), "
-				.. textColor .. "with " .. highlightColor .. avgTotalReservedBP .. textColor .. " reserved (dark green).\n"
-				.. textColor .. reservedDesc .. "\n\n"
-				.. textColor .. "You have " .. highlightColor .. (totalAvailableBP - avgTotalReservedBP) .. textColor .. idleDesc
-
+			-- Erstellen des Tooltip-Textes
+			local bpTooltipText = textColor .. "Your total buildpower (BP) is " .. highlightColor .. totalAvailableBP .. textColor .. ", of which:\n"
+				.. highlightColor .. formattedAssigned .. textColor .. " is assigned to tasks or moving to jobs (dark green bar).\n"
+				.. highlightColor .. formattedActive .. textColor .. " is currently active and being used (green bar). This is the number shown.\n"
+				.. highlightColor .. formattedIdle .. textColor .. " is idle with no BP tasks (red part)."
+		
 			if config.drawBPIndicators and BP['mSliderPosition'] ~= nil and BP['eSliderPosition'] ~= nil then
 				bpTooltipText = bpTooltipText .. "\n\n"
-					.. textColor .."If no builders were idle, your metal and energy income\n"
-					.. textColor .."would support an estimated " .. highlightColor .. math_ceil(BP['mSliderPosition'] * 100) .. textColor .. "% with metal and ".. highlightColor .. math_ceil(BP['eSliderPosition'] * 100) .. textColor .. "% with energy of your BP\n"
-					.. textColor .."(grey and yellow indicators on bar)."
+					.. textColor .. "The grey and yellow indicators show you that, if all BP were fully engaged:\n"
+					.. "Metal income would support " .. highlightColor .. math_ceil(BP['mSliderPosition'] * 100) .. textColor .. "% of BP.\n"
+					.. "Energy income would support " .. highlightColor .. math_ceil(BP['eSliderPosition'] * 100) .. textColor .. "% of BP."
 			end
 
 			if config.debugTooltip then
