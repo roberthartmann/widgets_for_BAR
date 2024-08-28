@@ -256,7 +256,7 @@ end
 
 
 -- stores the date that is used for the res calc and BP bar
-local BP = {0, 0, 0, 0, 0} -- ql position 6 and 7 were deleted
+local BP = {0, 0, 0, 0, 0}
 
 -- is used for visualisation purposed in old top bar design  ql
 --BP[1] = BP['empty1']
@@ -264,13 +264,9 @@ local BP = {0, 0, 0, 0, 0} -- ql position 6 and 7 were deleted
 --BP[3] ^= avgTotalReservedBP
 --BP[4] ^= BP['totalAvailableBP']																						--BeHe
 --BP[5] ^= BP['avgTotalUsedBP']																							--BeHe
---deleted BP[6] = BP['empty6']
---deleted BP[7] = BP['empty7']
+
 
 -- Used to store recent positions of the M/E-supported sliders on the BP bar so they can be moved more smoothly.
---BP['mSliderPositions'] = {} not used ql
---BP['eSliderPositions'] = {} not used ql
---BP['metalIncome'] = 0
 BP['energyIncome'] = 0 -- wird zumindest für wind verwendet ql
 BP['metalExpense'] = 0 -- wird zumindest für wind verwendet ql
 BP['energyExpense'] = 0 -- wird zumindest für wind verwendet ql
@@ -308,10 +304,6 @@ cacheDataBase['usedBPMetalExpense'] = 0  																				-- BeHe
 cacheDataBase['usedBPEnergyExpense'] = 0 																				-- BeHe
 cacheDataBase['usedBPExceptStalled'] = 0 																				-- BeHe
 cacheDataBase['usedBPIfNoStall'] = 0 																					-- BeHe
---cacheDataBase['metalIncome'] = 0 ql
---cacheDataBase['energyIncome'] = 0 ql
---cacheDataBase['metalExpense'] = 0 ql
---cacheDataBase['energyExpense'] = 0 ql
 
 
 local unitsPerFrame = 100 --limit processed units per frame to improve performance
@@ -1908,9 +1900,6 @@ function widget:GameStart()
 	init()
 end
 
-
-
-
 local function unitIterator(tbl)
 	return coroutine.wrap(function()
 		for unitID, unitData in pairs(tbl) do
@@ -1980,23 +1969,6 @@ function widget:GameFrame(n)
 
 			LogFrame("Processing unitID: " .. tostring(unitID) .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase)
 			local currentUnitBP, unitIsBuilt, unitDefID, unitTeamID = unp(unitData)
-			--if not unitIsBuilt then
-			--	local isDead = Spring.GetUnitIsDead(unitID)
-			--	LogFrame("Unit is not built, performing additional checks")
-			--	LogFrame("Unit is not built. isDead: " .. tostring(isDead))
-			--	
-			--	if isDead ~= false then -- unit is dead _or_ nonexistent
-			--		LogFrame("Unit is dead or nonexistent, untracking unitID: " .. unitID)
-			--		
-			--		UntrackUnit(unitID, unitDefID, unitTeamID)
-			--	else
-			--		LogFrame("Unit is not dead, updating cacheTotalReservedBP")
-			--		
-			--		-- Units still being built count as reserved.
-			--		cacheTotalReservedBP = cacheTotalReservedBP + currentUnitBP
-			--		unitsReservedBP[unitID] = currentUnitBP
-			--	end
-			--else
 			LogFrame("Unit is built, performing additional checks")
 			local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
 			LogFrame("Unit exists: " .. tostring(unitExists) .. ", foundActivity: " .. tostring(foundActivity) .. ", builtUnitDefID: " .. tostring(builtUnitDefID) .. ", mayBeBuilding: " .. tostring(mayBeBuilding) .. ", guardedUnitID: " .. tostring(guardedUnitID))
@@ -2065,93 +2037,17 @@ function widget:GameFrame(n)
 
 					if currentlyUsedBP and currentlyUsedBP >= 0 then
 						cacheTotallyUsedBP = cacheTotallyUsedBP + currentlyUsedBP
-
-						-- This unit is building but might be stalled. Only count as reserved its BP which aren't stalled.
-	--					if config.countStalledAsIdle then
-	--						unitsReservedBP[unitID] = currentlyUsedBP
-	--					end
 					end
 				end
 			end
-			--end
 			nowChecking = nowChecking + 1
 			LogFrame("Incremented nowChecking: " .. nowChecking)
 			--LogFrame("nowChecking new one" ..nowChecking)
 		end
-
 		LogFrame("Finished trackedBuilders loop")
-		--
-		-- See if guarded units should be treated as idle because they're guarding an idle builder.
-		--
-		--
-		--if config.guardingIdleBuilderCountsAsIdle then
-		--	--Spring.Echo("checking for idle guards")
-		--	local visited = {}
-		--	local builderIdle = {}
-		--
-			-- Should be O(n), as we'll only visit each node once.
-		--	for unitID, unitData in pairs(builderStates) do
-		--		--Spring.Echo("checking " .. tostring(unitID) .. ", visited " .. tostring(visited[unitID]))
-		--		if not visited[unitID] then
-		--			isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(unitData)
-		--
-		--			visited[unitID] = true
-		--			local stackIsIdle = not isActive
-		--			builderIdle[unitID] = not isActive
-		--			local maybeIdleStack = {}
-		--			table.insert(maybeIdleStack, unitID)
-		--
-		--			-- We're not building, but we're guarding. Figure out our state based on what the guarded unit is doing.
-		--			while guardedUnitID do
-		--				--Spring.Echo("  unit " .. tostring(unitID) .. " is guarding " .. tostring(guardedUnitID))
-		--				builderIdle[unitID] = (guardedUnitID and not builtUnitDefID) -- assume _this unit_ is idle if it's guarding but not building
-		--				if builtUnitDefID then
-		--					-- We're building something.
-		--					--Spring.Echo("  building something!")
-		--					stackIsIdle = false
-		--					break
-		--				elseif not builderStates[guardedUnitID] then
-		--					-- We're guarding a non-builder.
-		--					--Spring.Echo("  guarding a non-builder")
-		--					stackIsIdle = false
-		--					break
-		--				elseif visited[guardedUnitID] then
-		--					-- We've already run into this unit before. Use its state.
-		--					--Spring.Echo("  already found this unit, whose idle flag is " .. tostring(builderIdle[guardedUnitID]))
-		--					stackIsIdle = builderIdle[guardedUnitID]
-		--					break
-		--				else
-		--					-- We're not building, and we're guarding a builder. Recurse: see if that builder is idle.
-		--					--Spring.Echo("  not building, guarding a builder -- recurse!")
-		--					unitID = guardedUnitID
-		--					visited[unitID] = true
-		--					table.insert(maybeIdleStack, unitID)
-		--					isActive, builtUnitDefID, guardedUnitID, currentUnitBP = unp(builderStates[unitID])
-		--					if not guardedUnitID then
-		--						-- Finally, we're not guarding anything. Make our idle determination based on whether this unit is active.
-		--						--Spring.Echo("  no longer guarding; active " .. tostring(isActive))
-		--						stackIsIdle = not isActive
-		--					end
-		--				end
-		--			end
-		--
-		--			-- We've reached an end -- mark the whole stack of guarding builders appropriately.
-		--			for i, unitID in ipairs(maybeIdleStack) do
-		--				builderIdle[unitID] = stackIsIdle
-		--				if stackIsIdle then
-		--					-- This unit was ultimately guarding an idle builder, so mark it as idle, too.
-		--					--Spring.Echo("marking unit " .. tostring(unitID) .. " as idle")
-		--					unitsReservedBP[unitID] = 0
-		--				end
-		--			end
-		--		end
-		--	end
-		--end
 		for unitID, unitReservedBP in pairs(unitsReservedBP) do
 			cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
 		end
-
-
 		cacheDataBase[3] = cacheDataBase[3] + cacheTotalReservedBP
 		cacheDataBase[5] = cacheDataBase[5] + cacheTotallyUsedBP
 		cacheDataBase[6] = cacheDataBase[6] + cacheTotalStallingM
@@ -2160,10 +2056,6 @@ function widget:GameFrame(n)
 		-- TODO: consider averaging income and expense across all frames for which we calculated builder data.
 		local metal, metalStorage, metalPull, metalIncome, metalExpense, metalShare, metalSent = spGetTeamResources(myTeamID, "metal")
 		local energy, energyStorage, energyPull, energyIncome, energyExpense, energyShare, energySent = spGetTeamResources(myTeamID, "energy")
-		--cacheDataBase['metalIncome'] = metalIncome
-		--cacheDataBase['energyIncome'] = energyIncome
-		--cacheDataBase['metalExpense'] = metalExpense
-		--cacheDataBase['energyExpense'] = energyExpense
 
 		-- How much metal and energy are builders pulling? (This number will drop when they become resource-stalled, perhaps due to being low-priority.)
 		cacheDataBase['usedBPMetalExpense'] = cacheDataBase['usedBPMetalExpense'] + usedBPMetalExpense
@@ -2300,10 +2192,6 @@ function widget:GameFrame(n)
 			updateResbar('BP')
 			cacheDataBase[3] = 0
 			cacheDataBase[5] = 0
-			--cacheDataBase['metalIncome'] = 0
-			--cacheDataBase['energyIncome'] = 0
-			--cacheDataBase['metalExpense'] = 0
-			--cacheDataBase['energyExpense'] = 0
 			cacheDataBase['realWindStrength'] = 0
 			cacheDataBase['usedBPMetalExpense'] = 0
 			cacheDataBase['usedBPEnergyExpense'] = 0
@@ -2646,23 +2534,9 @@ local function drawResBars() --hadles the blinking
 			glCallList(dlistResbar[res][1])
 
 			if not spec and gameFrame > 90 then
-				--if playerStallingMetal then
-				--  glColor(0.0, -0.4, -0.4, 0.5 * playerStallingMetal * blinkProgress)
-				--elseif playerStallingEnergy then
-				--  glColor(0.2, -0.2, -1, 0.5 * playerStallingEnergy * blinkProgress)
-				--end
 				if playerStallingMetal or playerStallingEnergy then
 					glCallList(dlistResbar[res][4])
 				end
-				-- low energy background
-				--if r[res][1] < 2000 then
-				--  local process = (r[res][1] / r[res][2]) * 13
-				--  if process < 1 then
-				--      process = 1 - process
-				--      glColor(0.9, 0.55, 1, 0.08 * process)
-				--      glCallList(dlistResbar[res][5])
-				--  end
-				--end
 			end
 			drawResbarValues(res, updateText)
 			glCallList(dlistResbar[res][6])
@@ -3234,11 +3108,6 @@ function widget:PlayerChanged()
 end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam)
-	--TrackUnit(unitID, unitDefID, unitTeam, false)
-	--if not isCommander[unitDefID] then
-	--	return
-	--end
-	--record com created
 	if select(6, Spring.GetTeamInfo(unitTeam, false)) == myAllyTeamID then
 		allyComs = allyComs + 1
 	elseif spec then
@@ -3425,7 +3294,6 @@ function widget:Shutdown()
 	WG['topbar'] = nil
 end
 
-
 function findBPCommand(unitID, unitDefID, cmdList) -- for bp bar only most likely
 	-- TODO: can we get rid of cmdlist? Moving should count as non-idle for at least commanders, and perhaps other units too.
 	local unitExists = false
@@ -3548,23 +3416,6 @@ function UntrackUnit(unitID, unitDefID, unitTeam) -- needed for exact calculatio
 		end
 	end
 end
---function removeBuildUnitFromBP(unitID)
---  if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
---      local unitDefID = Spring.GetUnitDefID(unitID)
---      -- Sicherstellen, dass ein Metallkostenwert vorhanden ist
---      if not UnitDefs[unitDefID].metalCost then
---          UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
---      end
---      local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
---      local unitName = UnitDefs[unitDefID].name
---      -- Spezielle Behandlung für Kommandeur-Einheiten
---      if unitName == "armcom" or unitName == "corcom" then
---          currentUnitMetalCost = config.metalCostForCommander
---      end
---      BP[2] = BP[2] - currentUnitMetalCost
---      BP[4] = BP[4] - currentUnitBP   
---  end
---end
 
 function InitAllUnits()
 	BP[2] = 0
@@ -3578,47 +3429,3 @@ function InitAllUnits()
 		TrackUnit(unitID, Spring.GetUnitDefID(unitID), myTeamID)
 	end
 end
-
---function calcTotalMAndBPOfBuilders()
---  Log("calcTotalMAndBPOfBuilders")
---  local totalMetalCostOfBuilders = 0
---  local totalAvailableBP = 0
---  for unitID, currentUnitBP in pairs(trackedBuilders) do
---      -- Prüfen, ob die Einheit gültig und nicht tot ist
---      if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
---          local unitDefID = Spring.GetUnitDefID(unitID)
---          -- Sicherstellen, dass ein Metallkostenwert vorhanden ist
---          if not UnitDefs[unitDefID].metalCost then
---              UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
---          end
---          local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
---          local unitName = UnitDefs[unitDefID].name
---          -- Spezielle Behandlung für Kommandeur-Einheiten
---          if unitName == "armcom" or unitName == "corcom" then
---              currentUnitMetalCost = config.metalCostForCommander
---          end
---          totalMetalCostOfBuilders = totalMetalCostOfBuilders + currentUnitMetalCost
---          totalAvailableBP = totalAvailableBP + currentUnitBP
---      end
---  end
---  BP[2] = totalMetalCostOfBuilders
---  BP[4] = totalAvailableBP
---end
-
---function addBuildUnitToBP(unitID)
---  if Spring.ValidUnitID(unitID) and not Spring.GetUnitIsDead(unitID) then
---      local unitDefID = Spring.GetUnitDefID(unitID)
---      -- Sicherstellen, dass ein Metallkostenwert vorhanden ist
---      if not UnitDefs[unitDefID].metalCost then
---          UnitDefs[unitDefID].metalCost = 100 -- Standardwert, falls nicht vorhanden
---      end
---      local currentUnitMetalCost = UnitDefs[unitDefID].metalCost
---      local unitName = UnitDefs[unitDefID].name
---      -- Spezielle Behandlung für Kommandeur-Einheiten
---      if unitName == "armcom" or unitName == "corcom" then
---          currentUnitMetalCost = config.metalCostForCommander
---      end
---      BP[2] = BP[2] + currentUnitMetalCost
---      BP[4] = BP[4] + currentUnitBP   
---  end
---end
