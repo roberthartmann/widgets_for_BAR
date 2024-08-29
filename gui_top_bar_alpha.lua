@@ -2570,13 +2570,13 @@ local function drawResBars() --hadles the blinking
 end
 
 function widget:DrawScreen()
-
-		local progress = 0.75  -- Beispiel für 75% Fortschritt
-		local startAngle = 0
-		local endAngle = 2 * math.pi * progress
-		local segments = 50
-		local thickness = 10
-		DrawPartialRing(300, 300, 50, startAngle, endAngle, segments, thickness)
+	-- RING TEST
+	--local progress = 0.75  -- Beispiel für 75% Fortschritt
+	--local startAngle = 0
+	--local endAngle = 2 * math.pi * progress
+	--local segments = 50
+	--local thickness = 10
+	--DrawPartialRing(300, 300, 50, startAngle, endAngle, segments, thickness)
 
 
 	drawResBars()
