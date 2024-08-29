@@ -1,7 +1,7 @@
 local versionString = "version 0.3.0, modified 2024-08-29"
 function widget:GetInfo()
 	return {
-		name = "Top Bar with Buildpower 0.2",
+		name = "Top Bar with Buildpower 0.3",
 		desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
 		author = "Floris, Robert82 and McDoodle ",
 		date = "Feb, 2017",
