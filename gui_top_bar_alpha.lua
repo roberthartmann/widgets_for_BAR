@@ -1,7 +1,7 @@
-local versionString = "version 0.1.7, modified 2024-02-28"
+local versionString = "version 0.2.0, modified 2024-02-29"
 function widget:GetInfo()
 	return {
-		name = "Top Bar with Buildpower 1",
+		name = "Top Bar with Buildpower 0.2",
 		desc = "Shows resources, buildpower, wind speed, commander counter, and various options.",
 		author = "Floris, Robert82 and McDoodle ",
 		date = "Feb, 2017",
@@ -12,17 +12,7 @@ function widget:GetInfo()
 	}
 end
 
-function Log(Message)
-	if Debugmode==true then
-		Spring.Echo(Message)
-	end
-end
-local DebugmodeFrame = false
-function LogFrame(Message)
-	if DebugmodeFrame==true then
-		Spring.Echo(Message)
-	end
-end
+
 
 -------------------------------CONFIG------------------------------------------
 -------------------------------------------------------------------------------
@@ -565,6 +555,47 @@ local function RectQuad(px, py, sx, sy, offset)
 	gl.TexCoord(offset, offset)
 	gl.Vertex(px, sy, 0)
 end
+
+local function DrawPartialRing(cx, cy, r, startAngle, endAngle, segments, thickness)
+    -- Funktion zum Zeichnen eines Halbkreises
+    local function drawCircleCap(radius, thickness, angle)
+        local angleStep = math.pi / segments
+        gl.BeginEnd(GL.TRIANGLE_FAN, function()
+            -- Mittelpunkt des Halbkreises
+            gl.Vertex(cx + (radius + thickness / 2) * math.cos(angle), cy + (radius + thickness / 2) * math.sin(angle))
+            for i = 0, segments do
+                local a = angle + (i * angleStep)
+                local x = cx + (radius + thickness / 2) * math.cos(a)
+                local y = cy + (radius + thickness / 2) * math.sin(a)
+                gl.Vertex(x, y)
+            end
+        end)
+    end
+
+    -- Funktion zum Zeichnen des Hauptkörpers des Rings
+    local function drawRingBody()
+        local angleStep = (endAngle - startAngle) / segments
+        gl.BeginEnd(GL.QUAD_STRIP, function()
+            for i = 0, segments do
+                local angle = startAngle + i * angleStep
+                local x1 = cx + r * math.cos(angle)
+                local y1 = cy + r * math.sin(angle)
+                local x2 = cx + (r + thickness) * math.cos(angle)
+                local y2 = cy + (r + thickness) * math.sin(angle)
+                gl.Vertex(x1, y1)
+                gl.Vertex(x2, y2)
+            end
+        end)
+    end
+
+    -- Zeichnen des Hauptkörpers des Rings
+    drawRingBody()
+
+    -- Zeichnen der runden Enden
+    drawCircleCap(r, thickness, startAngle)  -- Rundes Ende am Startwinkel
+    drawCircleCap(r, thickness, endAngle)    -- Rundes Ende am Endwinkel
+end
+
 
 local function DrawRect(px, py, sx, sy, zoom)
 	gl.BeginEnd(GL.QUADS, RectQuad, px, py, sx, sy, zoom)
@@ -1899,7 +1930,7 @@ local unitIter = unitIterator(trackedBuilders)
 local unitIterator
 
 function widget:GameFrame(n)
-	LogFrame("n " .. n)
+	--LogFrame("n " .. n)
 	spec = spGetSpectatingState()
 
 	local bladeSpeedMultiplier = 0.2
@@ -1907,20 +1938,20 @@ function widget:GameFrame(n)
 	gameFrame = n
 
 	-- calculations for the exact metal and energy draw value
-	LogFrame("cache - entering GameFrame")
+	--LogFrame("cache - entering GameFrame")
 	local gameFrameFreq = 2 -- TODO: get this to 1
 	local unp = unpack or table.unpack
-	LogFrame("gameFrame: " .. gameFrame .. ", gameFrameFreq: " .. gameFrameFreq .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase .. ", trackedNum: " .. trackedNum)
+	--LogFrame("gameFrame: " .. gameFrame .. ", gameFrameFreq: " .. gameFrameFreq .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase .. ", trackedNum: " .. trackedNum)
 
 	-- If we're supposed to draw the buildpower bar, do some calculations.
 	-- Skip frames between calculations _unless_ we have too many builders to do them all in one frame, in which case nowChecking will be positive when the previous frame didn't finish.
 	if config.drawBPBar and ((gameFrame % gameFrameFreq == 0) or nowChecking > 0) then
 		gameStarted = true -- TODO: is this needed?
-		LogFrame("Processing BPBar calculations")
+		--LogFrame("Processing BPBar calculations")
 
 		-- Log initial cache values
-		LogFrame("Initial cacheTotalStallingM: " .. tostring(cacheTotalStallingM))
-		LogFrame("Initial cacheTotalStallingE: " .. tostring(cacheTotalStallingE))
+		--LogFrame("Initial cacheTotalStallingM: " .. tostring(cacheTotalStallingM))
+		--LogFrame("Initial cacheTotalStallingE: " .. tostring(cacheTotalStallingE))
 		local cacheTotalStallingM = 0
 		local cacheTotalStallingE = 0
 
@@ -1936,7 +1967,7 @@ function widget:GameFrame(n)
 		local builderStates = {}
 		local unitsReservedBP = {}
 
-		LogFrame("Starting trackedBuilders loop")
+		--LogFrame("Starting trackedBuilders loop")
 
 		-- Initialisieren des unitIterator, falls dies der erste Frame ist oder die Coroutine beendet ist
 		if not unitIterator or coroutine.status(unitIterator) == "dead" then
@@ -1954,27 +1985,30 @@ function widget:GameFrame(n)
 				break -- Keine weiteren Einheiten mehr zum Verarbeiten oder Fehler
 			end
 
-			LogFrame("Processing unitID: " .. tostring(unitID) .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase)
+			--LogFrame("Processing unitID: " .. tostring(unitID) .. ", nowChecking: " .. nowChecking .. ", trackPosBase: " .. trackPosBase)
 			local currentUnitBP, unitIsBuilt, unitDefID, unitTeamID = unp(unitData)
-			LogFrame("Unit is built, performing additional checks")
+			--LogFrame("Unit is built, performing additional checks")
 			local unitExists, foundActivity, builtUnitDefID, mayBeBuilding, guardedUnitID = findBPCommand(unitID, unitDefID, {CMD.REPAIR, CMD.RECLAIM, CMD.CAPTURE, CMD.GUARD})
-			LogFrame("Unit exists: " .. tostring(unitExists) .. ", foundActivity: " .. tostring(foundActivity) .. ", builtUnitDefID: " .. tostring(builtUnitDefID) .. ", mayBeBuilding: " .. tostring(mayBeBuilding) .. ", guardedUnitID: " .. tostring(guardedUnitID))
+			--LogFrame("Unit exists: " .. tostring(unitExists) .. ", foundActivity: " .. tostring(foundActivity) .. ", builtUnitDefID: " .. tostring(builtUnitDefID) .. ", mayBeBuilding: " .. tostring(mayBeBuilding) .. ", guardedUnitID: " .. tostring(guardedUnitID))
 
 			if not unitExists then
-				LogFrame("Unit no longer exists, untracking unitID: " .. unitID)
+				--LogFrame("Unit no longer exists, untracking unitID: " .. unitID)
 				
 				UntrackUnit(unitID)
+			elseif not unitIsBuilt then
+				break
+				
 			elseif not foundActivity then
-				LogFrame("Unit not found doing any activity, marking as idle")
+				--LogFrame("Unit not found doing any activity, marking as idle")
 				
 				builderStates[unitID] = { false, builtUnitDefID, guardedUnitID, currentUnitBP }
 			else
-				LogFrame("Unit is active, processing buildpower calculations")
+				--LogFrame("Unit is active, processing buildpower calculations")
 				
 				-- Assume all of this unit's buildpower is reserved.
 				unitsReservedBP[unitID] = currentUnitBP
-				LogFrame("unitID  " ..tostring(unitID))
-				LogFrame("unitsReservedBP[unitID]  " ..tostring(unitsReservedBP[unitID]))
+				--LogFrame("unitID  " ..tostring(unitID))
+				--LogFrame("unitsReservedBP[unitID]  " ..tostring(unitsReservedBP[unitID]))
 				-- This unit might be building, but we don't know what. See if it's building something.
 				if mayBeBuilding and not builtUnitDefID then
 					local builtUnitID = spGetUnitIsBuilding(unitID)
@@ -2028,10 +2062,10 @@ function widget:GameFrame(n)
 				end
 			end
 			nowChecking = nowChecking + 1
-			LogFrame("Incremented nowChecking: " .. nowChecking)
-			--LogFrame("nowChecking new one" ..nowChecking)
+			--LogFrame("Incremented nowChecking: " .. nowChecking)
+			----LogFrame("nowChecking new one" ..nowChecking)
 		end
-		LogFrame("Finished trackedBuilders loop")
+		--LogFrame("Finished trackedBuilders loop")
 		for unitID, unitReservedBP in pairs(unitsReservedBP) do
 			cacheTotalReservedBP = cacheTotalReservedBP + unitReservedBP
 		end
@@ -2063,7 +2097,7 @@ function widget:GameFrame(n)
 		end
 
 		trackPosBase = trackPosBase + unitsPerFrame
-		LogFrame("trackPosBase-----------------" ..trackPosBase)
+		--LogFrame("trackPosBase-----------------" ..trackPosBase)
 	end
 
 	-- If enough frames have passed that we've calculated BP data for all builders, we can present this datapoint to the user.
@@ -2192,8 +2226,8 @@ function widget:GameFrame(n)
 		cacheDataBase[7] = 0
 		nowChecking = 0
 	end
-	LogFrame("Finished GameFrame processing")
-	LogFrame("GameFrame(n)")
+	--LogFrame("Finished GameFrame processing")
+	--LogFrame("GameFrame(n)")
 end
 
 
@@ -2536,6 +2570,14 @@ local function drawResBars() --hadles the blinking
 end
 
 function widget:DrawScreen()
+	-- RING TEST
+	--local progress = 0.75  -- Beispiel für 75% Fortschritt
+	--local startAngle = 0
+	--local endAngle = 2 * math.pi * progress
+	--local segments = 50
+	--local thickness = 10
+	--DrawPartialRing(300, 300, 50, startAngle, endAngle, segments, thickness)
+
 
 	drawResBars()
 
@@ -3095,6 +3137,7 @@ function widget:PlayerChanged()
 end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam)
+	TrackUnit(unitID, unitDefID, unitTeam, true)
 	if select(6, Spring.GetTeamInfo(unitTeam, false)) == myAllyTeamID then
 		allyComs = allyComs + 1
 	elseif spec then
