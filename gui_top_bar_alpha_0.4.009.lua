@@ -1783,8 +1783,8 @@ local function calculateAverages()
 
 	local bpRatioSupportedByMIncome = 1
 	local bpRatioSupportedByEIncome = 1
-	Spring.Echo('-----------'  ..gameFrame)
-	Spring.Echo('usedBP_instant'  ..BP['usedBP_instant'])
+	--Spring.Echo('-----------'  ..gameFrame)
+	--Spring.Echo('usedBP_instant'  ..BP['usedBP_instant'])
 	if BP['usedBP_instant'] >= 1 then
 
 		local totalBP = BP[4]
@@ -1846,7 +1846,7 @@ local function calculateAverages()
 			else
 				_, _, _, energyIncome, _, _, _ = spGetTeamResources(myTeamID, "energy")
 			end
-			Spring.Echo('income'  ..energyIncome)
+			--Spring.Echo('income'  ..energyIncome)
 			local mycalc = ((energyIncome - numWindGenerators * BP['realWindStrength_instant']) / (BP['energyExpensePerBP'] * BP[4]))
 			local smoothingFactor = 0.1 -- Wert zwischen 0 (keine Bewegung) und 1 (sofortiger Sprung)
 			local smoothedWindMin = BP['eSliderPosition_minWind'] + (mycalc - BP['eSliderPosition_minWind']) * smoothingFactor
@@ -1856,11 +1856,11 @@ local function calculateAverages()
 			local smoothedWindMax = BP['eSliderPosition_maxWind'] + (myCalcMax - BP['eSliderPosition_maxWind']) * smoothingFactor
 			BP['eSliderPosition_maxWind'] = math_min(1, math_max(0,smoothedWindMax))
 			-----------------------XXXXXXXXXXXXXXXXX
-			Spring.Echo('energyExpensePerBP'  ..BP['energyExpensePerBP'])
-			Spring.Echo(tostring(mycalc) ..'         mycalc')
-			Spring.Echo(tostring(BP['eSliderPosition_minWind'])..'  eSliderPosition_minWind' )
-			Spring.Echo(tostring(myCalcMax) ..'         myCalcMax')
-			Spring.Echo(tostring(BP['eSliderPosition_maxWind'])..'  eSliderPosition_maxWind' )
+			--Spring.Echo('energyExpensePerBP'  ..BP['energyExpensePerBP'])
+			--Spring.Echo(tostring(mycalc) ..'         mycalc')
+			--Spring.Echo(tostring(BP['eSliderPosition_minWind'])..'  eSliderPosition_minWind' )
+			--Spring.Echo(tostring(myCalcMax) ..'         myCalcMax')
+			--Spring.Echo(tostring(BP['eSliderPosition_maxWind'])..'  eSliderPosition_maxWind' )
 		end
 
 		if BP['metalSupportedBP'] ~= nil or BP['energySupportedBP'] ~= nil then
@@ -1959,7 +1959,7 @@ function widget:GameFrame(n)
 
 							local unitWantedM = unitCostData[builtUnitDefID].MperBP * unitBP
 							local unitWantedE = unitCostData[builtUnitDefID].EperBP * unitBP
-							Spring.Echo('unitWantedE' ..tostring(unitWantedE))
+							--Spring.Echo('unitWantedE' ..tostring(unitWantedE))
 							totalWantedM = totalWantedM + unitWantedM
 							totalWantedE = totalWantedE + unitWantedE
 							-- Low-priority units don't have their pulled M/E reported correctly.
@@ -1991,8 +1991,8 @@ function widget:GameFrame(n)
 		cacheDataBase['usedBP_instant'] = cacheDataBase['usedBP_instant'] + totaUsedBP
 
 		cacheDataBase['totalWantedBP'] = cacheDataBase['totalWantedBP'] + totalWantedBP
-		Spring.Echo('totalWantedM' ..tostring(totalWantedM))
-		Spring.Echo('cacheDataBase totalWantedM' ..tostring(cacheDataBase['totalWantedM']))
+		--Spring.Echo('totalWantedM' ..tostring(totalWantedM))
+		--Spring.Echo('cacheDataBase totalWantedM' ..tostring(cacheDataBase['totalWantedM']))
 		cacheDataBase['totalWantedM'] = cacheDataBase['totalWantedM'] + totalWantedM
 		cacheDataBase['totalWantedE'] = cacheDataBase['totalWantedE'] + totalWantedE
 	end
