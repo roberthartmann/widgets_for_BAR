@@ -13,7 +13,7 @@ end
 
 -------------------------------CONFIG------------------------------------------
 -------------------------------------------------------------------------------
-
+local widget = widget ---@type Widget
 local config = {
 	drawBPBar = true,
 	autoHideButtons = false,
@@ -299,7 +299,7 @@ if UnitDefs[Spring.GetTeamRulesParam(Spring.GetMyTeamID(), 'startUnit')] then
 end
 
 -- Local variables for function names improve performance. See page 17 of https://www.lua.org/gems/sample.pdf ("Lua Performance Tips", by Roberto Ierusalimschy)
-local math_ceil = math.ceil
+--local math_ceil = math.ceil
 local math_floor = math.floor
 local math_round = math.round
 local math_min = math.min
@@ -1057,7 +1057,7 @@ local function updateResbar(res)
 		sliderHeightAdd = barHeight / 0.75
 		shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
 	end
-	shareSliderWidth = math_ceil(shareSliderWidth)
+	shareSliderWidth = math.ceil(shareSliderWidth)
 
 	if res == 'metal' then
 		resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
@@ -1326,8 +1326,8 @@ local function updateResbar(res)
 			if config.drawBPIndicators and BP['mSliderPosition'] ~= nil and BP['eSliderPosition'] ~= nil then
 				bpTooltipText = bpTooltipText .. "\n\n"
 					.. textColor .. "The grey and yellow indicators show you that, if all BP were fully engaged:\n"
-					.. "Metal income would support " .. highlightColor .. math_ceil(BP['mSliderPosition'] * 100) .. textColor .. "% of BP.\n"
-					.. "Energy income would support " .. highlightColor .. math_ceil(BP['eSliderPosition'] * 100) .. textColor .. "% of BP."
+					.. "Metal income would support " .. highlightColor .. math.ceil(BP['mSliderPosition'] * 100) .. textColor .. "% of BP.\n"
+					.. "Energy income would support " .. highlightColor .. math.ceil(BP['eSliderPosition'] * 100) .. textColor .. "% of BP."
 			end
 
 			if config.debugTooltip then
@@ -1470,13 +1470,13 @@ local function drawResbarValues(res, updateText)
 			end
 			-- Show reserved BP as a proportion of total BP
 			additionalWidth = math_floor((reservedBP / totalBP) * barWidth) - valueWidth
-			if additionalWidth < math_ceil(barHeight * 0.2) or math_ceil(barHeight * 0.2) > barWidth then
+			if additionalWidth < math.ceil(barHeight * 0.2) or math.ceil(barHeight * 0.2) > barWidth then
 				additionalWidth = 0
 			end
 		end
 
-		if valueWidth < math_ceil(barHeight * 0.2) or r[res][2] == 0 then
-			valueWidth = math_ceil(barHeight * 0.2)
+		if valueWidth < math.ceil(barHeight * 0.2) or r[res][2] == 0 then
+			valueWidth = math.ceil(barHeight * 0.2)
 		end
 
 		local uniqueKey = valueWidth * 10000 + additionalWidth
@@ -2001,7 +2001,7 @@ function widget:GameFrame(n)
 			unitTracking.totalUnits = unitTracking.totalUnits + 1
 		end
 		local totalFrames = unitTracking.frameCheckInterval
-		unitTracking.unitsPerFrame = math_min(unitTracking.maxUnitsPerFrame, math_ceil(unitTracking.totalUnits / totalFrames))
+		unitTracking.unitsPerFrame = math_min(unitTracking.maxUnitsPerFrame, math.ceil(unitTracking.totalUnits / totalFrames))
 		unitTracking.nextCheckFrame = gameFrame + unitTracking.frameCheckInterval
 		updateBPValues()
 	end
