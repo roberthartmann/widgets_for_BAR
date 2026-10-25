@@ -30,3 +30,17 @@ Implements `integration_design.md` and `bp_feature_spec.md`. These notes list on
 
 * `tools/mock_env.lua`: added `Spring.GetUnitCurrentCommand`, `WG.options.addOptions` and `WG.options.removeOptions`.
 * `tools/run_widget.py`: when `WG.buildpower` exists, it checks and prints the data after the 400 frames, and toggles every boolean option off and on. The stock widget still passes. The flags stay false in that run because the 1 s flag gate uses `os.clock`, and 400 frames take well under a second.
+
+## Review fixes (after the independent review)
+
+* **Current/storage clear rectangles.** The narrower metal and energy bars make the stock clear rectangle of
+  the storage text overlap the centred current value (7 to 13 px at 1080p). `bpUi.drawBars` now couples the
+  two dirty flags: when either the current value or the storage text is re-rendered, both are.
+* **Relayout from options.** `enabled`, `widthFraction` and `icon` call `widget:ViewResize()` instead of
+  `init()`, because only ViewResize resets `cache.lastValueWidth`; otherwise the energy fill and glow lists
+  stayed at the old position until the amount changed.
+* **Guard chains.** A builder whose only order is guarding a tracked builder that is idle counts as idle
+  (one level, so guard loops are safe). This was in the spec's feature table and had been left out.
+* The BP tooltip is not registered while the resource bars are hidden, options are registered after
+  `ViewResize`, and the three table constructors plus the metal/energy area lines are back to stock with
+  the BP changes as added lines. Only the five GetInfo lines differ from stock now.

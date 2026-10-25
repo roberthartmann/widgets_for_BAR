@@ -119,7 +119,7 @@ Spring.GetUnitIsBuilding = function(id) local u = HARNESS.units[id] return u and
 Spring.GetUnitIsBeingBuilt = function(id) local u = HARNESS.units[id] return u and u.built < 1 end
 Spring.GetUnitCommands = function(id, n) local u = HARNESS.units[id] if not u then return nil end if n == 0 then return #u.cmds end return u.cmds end
 Spring.GetUnitCommandCount = function(id) local u = HARNESS.units[id] return u and #u.cmds or 0 end
-Spring.GetUnitCurrentCommand = function(id, i) local u = HARNESS.units[id] local c = u and u.cmds[i or 1] if c then return c.id, 0, 0 end end
+Spring.GetUnitCurrentCommand = function(id, i) local u = HARNESS.units[id] local c = u and u.cmds[i or 1] if c then return c.id, 0, 0, unpack(c.params or {}) end end
 Spring.GetFactoryCommands = Spring.GetUnitCommands
 Spring.GetCommandQueue = Spring.GetUnitCommands
 Spring.GetUnitResources = function(id) local u = HARNESS.units[id] if not u then return nil end

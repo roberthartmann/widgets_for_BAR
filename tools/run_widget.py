@@ -35,6 +35,7 @@ function(w)
   U.units[con].building = solarFrame; U.units[con].cmds = { { id = -7 } }
   U.units[nano].cmds = { { id = CMD.FIGHT } }
   U.units[lab].cmds = { { id = -6 }, { id = -6 } }
+  local guardCon = U.addUnit(2, 0, 1); U.units[guardCon].cmds = { { id = CMD.GUARD, params = { com } } } -- guards the idle commander: idle itself
   local enemyCom = U.addUnit(8, 1, 1)
 
   step("Initialize", function() w:Initialize() end)
@@ -80,6 +81,7 @@ function(w)
       local d = WG.buildpower.GetData()
       assert(type(d) == "table", "GetData did not return a table")
       assert(type(d.total) == "number" and d.total > 0, "total is not > 0: " .. tostring(d.total))
+      assert(HARNESS.bpStart == "frame 30: total=780 reserved=190 used=83.870967741935", "unexpected frame 30 data: " .. tostring(HARNESS.bpStart))
       assert(type(d.reserved) == "number", "reserved is not a number")
       assert(type(d.used) == "number", "used is not a number")
       local function f(v) return type(v) == "number" and string.format("%.3f", v) or tostring(v) end

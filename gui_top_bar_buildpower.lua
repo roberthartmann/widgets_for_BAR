@@ -163,8 +163,8 @@ local textWarnColor = "\255\255\215\215"
 
 -- UI Elements
 local topbarArea = {}
-local resbarArea = { metal = {}, energy = {}, BP = {} }
-local resbarDrawinfo = { metal = {}, energy = {}, BP = {} }
+local resbarArea = { metal = {}, energy = {} }
+local resbarDrawinfo = { metal = {}, energy = {} }
 local shareIndicatorArea = { metal = {}, energy = {} }
 local windArea = {}
 local tidalarea = {}
@@ -189,7 +189,7 @@ local dlist = {
 	windText = {},
 	resValuesBar = {},
 	resValues = {},
-	resbar = { metal = {}, energy = {}, BP = {} },
+	resbar = { metal = {}, energy = {} },
 	energyGlow = nil,
 	quit = nil,
 	buttons = nil,
@@ -198,6 +198,7 @@ local dlist = {
 	wind2 = nil,
 	tidal2 = nil,
 }
+resbarArea.BP, resbarDrawinfo.BP, dlist.resbar.BP = {}, {}, {} -- BP
 
 -- Caching (consolidated into table to save local slots)
 local cache = {
@@ -1478,6 +1479,7 @@ bpTrack.GetUnitResources = Spring.GetUnitResources
 bpTrack.GetTeamResources = Spring.GetTeamResources
 bpTrack.GetWind = Spring.GetWind
 bpTrack.CMD_FIGHT = CMD.FIGHT
+bpTrack.CMD_GUARD = CMD.GUARD
 
 -- time based weighted averages: a ring of samples (one per pass), read back over the last avgWindow frames
 bpTrack.avgWindow = 60 -- game frames (2 s)
@@ -1672,6 +1674,25 @@ function bpTrack.inspect(unitID)
 	if not target and kind == 2 and numCmds == 1 and t.GetUnitCurrentCommand
 		and t.GetUnitCurrentCommand(unitID) == t.CMD_FIGHT then
 		return -- nano that only has its default fight order and is not building anything: idle
+	end
+	if not target and numCmds == 1 and t.GetUnitCurrentCommand then
+		local cmdID, _, _, guarded = t.GetUnitCurrentCommand(unitID)
+		if cmdID == t.CMD_GUARD and guarded and t.speed[guarded] and not t.GetUnitIsBuilding(guarded) then
+			local n2
+			if t.kind[guarded] == 3 then
+				n2 = t.GetFactoryCommands(guarded, 0)
+				if type(n2) == "table" then
+					n2 = #n2
+				end
+			elseif t.GetUnitCommandCount then
+				n2 = t.GetUnitCommandCount(guarded)
+			else
+				n2 = t.GetUnitCommands(guarded, 0)
+			end
+			if n2 == 0 then
+				return -- guarding an idle builder: idle itself (one level only, so guard loops are safe)
+			end
+		end
 	end
 	t.accReserved = t.accReserved + S
 	if not target then
@@ -2374,6 +2395,14 @@ function bpUi.drawBars(update)
 	end
 	if update then
 		bpUi.refreshValues()
+		-- narrower metal/energy bars: the stock clear rectangles of the current value and the
+		-- storage text overlap, so whenever one of them is re-rendered the other must be too
+		for i = 1, 2 do
+			local u = updateRes[resourceNames[i]]
+			if u[1] or u[3] then
+				u[1], u[3] = true, true
+			end
+		end
 	end
 	if (bp.stallingMetal or bp.stallingEnergy) and not spec and gameFrame > cfg.spawnWarpInFrame and dlist.resbar.BP[4] then
 		glBlending(GL.SRC_ALPHA, GL.ONE)
@@ -2573,7 +2602,7 @@ function bpUi.tooltipText()
 end
 
 function bpUi.updateTooltip()
-	if not WG.tooltip or not resbarArea.BP[1] then
+	if not WG.tooltip or not resbarArea.BP[1] or not showResourceBars then
 		return
 	end
 	local text = bpUi.tooltipText()
@@ -2626,7 +2655,7 @@ function bpUi.addOptions()
 				end
 				bp.cfg[key] = value
 				if relayout then
-					init()
+					widget:ViewResize() -- not init(): resets cache.lastValueWidth so the metal/energy fill lists move too
 				else
 					bpUi.forceRebuild = true
 					bpUi.lastTooltip = nil
@@ -2690,13 +2719,15 @@ function init()
 	local width = mathFloor(totalWidth / 4.4)
 	local meW = bpUi.layout(width) -- BP: metal/energy width; places the BP section in the stock metal+energy span
 	resbarArea.metal =
-		{ topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + meW, topbarArea[4] } -- BP: meW
+		{ topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
+	resbarArea.metal[3] = resbarArea.metal[1] + meW -- BP: metal keeps its left edge, BP follows
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar("metal")
 
 	--energy
 	resbarArea.energy =
-		{ topbarArea[1] + filledWidth + width - meW, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] } -- BP: right edge unchanged
+		{ topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
+	resbarArea.energy[1] = resbarArea.energy[3] - meW -- BP: energy keeps its right edge
 	filledWidth = filledWidth + width + widgetSpaceMargin
 	updateResbar("energy")
 
@@ -4058,8 +4089,8 @@ function widget:Initialize()
 	refreshWindTidalTextCache()
 
 	guishaderEnabled = WG.guishader ~= nil
-	bpUi.initialize() -- BP: options, WG.buildpower
 	widget:ViewResize()
+	bpUi.initialize() -- BP: options, WG.buildpower (after ViewResize: a relayout from onchange needs fonts and margins)
 
 	if gameFrame > 0 then
 		widget:GameStart()
