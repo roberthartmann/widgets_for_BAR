@@ -1,5 +1,11 @@
 # Reviving the Buildpower Top Bar – comparison and plan
 
+> **Decision (2026-10-25):** Robert chose option A after all, a full fork of the current stock top bar,
+> because the data needed for the bar cannot be obtained from outside it and the bar has to sit between
+> metal and energy. The fork is `gui_top_bar_buildpower.lua`; `stock_reference/` is its merge base and
+> `design/integration_design.md` describes how the additions are kept mergeable. The rest of this file is
+> the original comparison.
+
 Date of analysis: 2026-10-25. Sources: `gui_top_bar_alpha_0.4.010.lua` (this repo),
 `WybrenKoelmans/BAR-Widgets/gui_top_bar_extra/gui_top_bar_extra.lua` (uBdead, 2025-08-16) and
 `beyond-all-reason/Beyond-All-Reason/luaui/Widgets/gui_top_bar.lua` at master (last top bar commit 2026-09-24).

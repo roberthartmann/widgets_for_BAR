@@ -7,21 +7,29 @@ Enhance your gaming experience with the new Top Bar Widget for BAR (Beyond All R
 - **Time Behind Calculation**: Instantly understand how efficiently you're using your build power (BP).
 
 ## Versions
-The `gui_top_bar_alpha.lua` version is the one described here. It is stable :)
+- **`gui_top_bar_buildpower.lua`** is the current version (Oct 2026). It is the stock BAR top bar
+  (new skewed design, render-to-texture) plus the buildpower bar. Use this one.
+- `gui_top_bar_alpha_0.4.010.lua` and everything in `old_versions/` and `WIP/` are the previous forks
+  (2023 to 2024) of a much older stock top bar. They are kept for reference only and no longer match the game.
+- `stock_reference/` holds the unmodified stock files the current version was forked from, `design/`
+  the specification and integration design, `tools/` a headless syntax check and lifecycle test.
 
 ## Installation Guide
 
 ### Step 1: Download the Widget
-First, download the `gui_top_bar_alpha.lua` file from our [GitHub repository](https://github.com/roberthartmann/widgets_for_BAR/blob/main/gui_top_bar_alpha.lua).
+Download `gui_top_bar_buildpower.lua` from this repository.
 
 ### Step 2: Place the Widget File
-Place the downloaded file into your widgets folder. The path should be `your_bar_folder/data/luaui/widgets`.
+Place the file into your widgets folder: `your_bar_folder/data/LuaUI/Widgets`.
 
 ### Step 3: Activate the Widget
-Start a game, then press `F11` to access the widget menu. Filter for the top bar, deactivate the original top bar, and activate the new one.
+Start a game, press `F11` to open the widget list, filter for "top bar", **disable "Top Bar"** (the stock one)
+and **enable "Top Bar with Buildpower"**. Keep "Top Bar Buttons" enabled; it works with both.
+Both bars use the same spot, so if you see two bars on top of each other the stock one is still on.
 
-### Step 4: Adjust Other Widgets
-After activating the new top bar, reactivate any widgets that are positioned beside it. They may need to be readjusted to fit alongside the new top bar.
+### Step 4: Settings
+The options are in the settings menu under *Custom* > *Top Bar with Buildpower*: buildpower bar on/off,
+its width, the eco support indicators, the wind range indicator, the alerts, the icon and a debug tooltip.
 
 ### Step 5: Understanding the Widget
 To fully benefit from the widget, it's crucial to understand its functionalities. Refer to the images and descriptions in our repository to get a comprehensive overview.

@@ -68,8 +68,38 @@ function(w)
       end
       if f == 200 then HARNESS.res.metal[1] = 0; HARNESS.res.metal[3] = 60; HARNESS.res.energy[1] = 2500; HARNESS.res.energy[9] = 300 end
       if f == 300 then HARNESS.mx, HARNESS.my = 700, 1065 end -- hover the bar
+      if f == 30 and WG.buildpower then
+        local d = WG.buildpower.GetData()
+        HARNESS.bpStart = string.format("frame 30: total=%s reserved=%s used=%s", tostring(d.total), tostring(d.reserved), tostring(d.used))
+      end
     end
   end)
+  if WG.buildpower then
+    -- buildpower fork only: the published data after the 400 frames
+    step("buildpower data", function()
+      local d = WG.buildpower.GetData()
+      assert(type(d) == "table", "GetData did not return a table")
+      assert(type(d.total) == "number" and d.total > 0, "total is not > 0: " .. tostring(d.total))
+      assert(type(d.reserved) == "number", "reserved is not a number")
+      assert(type(d.used) == "number", "used is not a number")
+      local function f(v) return type(v) == "number" and string.format("%.3f", v) or tostring(v) end
+      HARNESS.bpReport = (HARNESS.bpStart or "frame 30: n/a") .. "\\n     frame 400: total=" .. f(d.total) .. " reserved=" .. f(d.reserved)
+        .. " used=" .. f(d.used) .. " usedRatio=" .. f(d.usedRatio) .. " mSupportRatio=" .. f(d.mSupportRatio)
+        .. " eSupportRatio=" .. f(d.eSupportRatio) .. "\\n     flags: stallingMetal=" .. tostring(d.stallingMetal)
+        .. " stallingEnergy=" .. tostring(d.stallingEnergy) .. " idleAlert=" .. tostring(d.idleAlert)
+        .. " surplusBP=" .. tostring(d.surplusBP) .. "; options registered=" .. #HARNESS.options
+        .. " (addOptions calls: " .. tostring(HARNESS.optionCalls) .. ")"
+    end)
+    if HARNESS.bpReport then results[#results + 1] = { "buildpower values", true, HARNESS.bpReport } end
+    step("buildpower options toggle", function()
+      for _, o in ipairs(HARNESS.options) do
+        if o.onchange and type(o.value) == "boolean" then
+          o.onchange(o, not o.value) w:Update(0.3) if w.DrawScreen then w:DrawScreen() end
+          o.onchange(o, o.value) w:Update(0.3) if w.DrawScreen then w:DrawScreen() end
+        end
+      end
+    end)
+  end
   step("MouseMove/Press/Release", function()
     if w.MouseMove then w:MouseMove(700, 1065, 0, 0, 1) end
     if w.MousePress then w:MousePress(700, 1065, 1) end
@@ -91,7 +121,7 @@ results = driver(w)
 fail = 0
 for i in range(1, len(results) + 1):
     name, ok, err = results[i][1], results[i][2], results[i][3]
-    print(("PASS " if ok else "FAIL ") + str(name) + ("" if ok and name != "GetInfo" else "\n     " + str(err)))
+    print(("PASS " if ok else "FAIL ") + str(name) + ("" if ok and name not in ("GetInfo", "buildpower values") else "\n     " + str(err)))
     if not ok:
         fail += 1
 log = rt.globals()["HARNESS"]["log"]

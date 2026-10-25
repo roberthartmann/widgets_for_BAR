@@ -119,6 +119,7 @@ Spring.GetUnitIsBuilding = function(id) local u = HARNESS.units[id] return u and
 Spring.GetUnitIsBeingBuilt = function(id) local u = HARNESS.units[id] return u and u.built < 1 end
 Spring.GetUnitCommands = function(id, n) local u = HARNESS.units[id] if not u then return nil end if n == 0 then return #u.cmds end return u.cmds end
 Spring.GetUnitCommandCount = function(id) local u = HARNESS.units[id] return u and #u.cmds or 0 end
+Spring.GetUnitCurrentCommand = function(id, i) local u = HARNESS.units[id] local c = u and u.cmds[i or 1] if c then return c.id, 0, 0 end end
 Spring.GetFactoryCommands = Spring.GetUnitCommands
 Spring.GetCommandQueue = Spring.GetUnitCommands
 Spring.GetUnitResources = function(id) local u = HARNESS.units[id] if not u then return nil end
@@ -170,6 +171,9 @@ WG.tooltip = { AddTooltip = noop, RemoveTooltip = noop }
 WG.notifications = { queueNotification = noop, addEvent = noop }
 HARNESS.options = {}
 WG.options = { addOption = function(o) HARNESS.options[#HARNESS.options + 1] = o end, removeOption = noop, getOptionValue = function() return nil end }
+WG.options.addOptions = function(list) HARNESS.optionCalls = (HARNESS.optionCalls or 0) + 1 for _, o in ipairs(list) do HARNESS.options[#HARNESS.options + 1] = o end end
+WG.options.removeOptions = function(ids) local rm = {} for _, id in ipairs(ids) do rm[id] = true end
+  local keep = {} for _, o in ipairs(HARNESS.options) do if not rm[o.id] then keep[#keep + 1] = o end end HARNESS.options = keep end
 WG.resource_spot_finder = { metalSpotsList = {} }
 
 widgetHandler = {
