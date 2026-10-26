@@ -60,3 +60,24 @@ knob, metal always gets the red share knob (also in single-player, reversed in a
 Measured against the mockup every geometric value is within 0.016 H and angles within 1.2 degrees; the
 remaining differences are glyph widths (font), the mockup's own inconsistent fill length (58.6% for 812/1000)
 and its ring tips (51.2% / 76.6% of the sweep for a "50%" label).
+
+## New design, round 2 (second review)
+
+* **Income / pull column.** The numbers are printed with at most three digits plus a unit (`bpUi.piText`:
+  815, 1.9k, 12k, 1.2m) and limited per row: metal's upper row ends before the hovered share knob at share
+  level 1, its lower row before the storage glyph; energy's sign keeps its mockup centre unless the hovered
+  knob at level 1 needs it to move right (about 1 px at 1080p, more in compressed layouts), and the number
+  grows left up to the sign. Only longer numbers are shrunk. The text sizes are multiplied by the compression
+  factor k like the positions (the knobs keep their size).
+* **Clear rects.** The sign never leaves `clearPI`, metal's limit is `floor(glyphX - m) - 1`. The harness now
+  draws render-to-texture content unclipped, like the game helper (the scissor list limits only the clear);
+  `--r2t-clip` restores the old behaviour. The new design shows no remnants after long then short numbers.
+  The buildpower fork (and stock, slightly) draw text outlines 1 px past their clear rects, which accumulate
+  at the panel edges when the numbers change often.
+* **Alerts** start below the metal overflow banner while it is shown (the list is rebuilt when it appears or
+  goes). **The gauge size option** is gone (the layout never read it); an old saved `widthFraction` is ignored.
+* **Layout.** k accounts for the unscaled wind text and the small panel's shadow; GetFreeArea starts after that
+  shadow and is never inverted. The energy banner follows the drawn slant also on legacy builds, GetPosition
+  reports metal's real bottom-left corner, and GetSkewConfig reports `useSkew = true` with the small panel's
+  slope (`skewTan`, which the converter usage continues) and metal's (`leftSkewTan`).
+* A drag can no longer start while the bars are hidden.

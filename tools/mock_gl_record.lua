@@ -453,7 +453,9 @@ local function renderToTexture(tex, fn, clear, scissors, ...)
 	S.scissor = nil
 	local rects = normRects(scissors)
 	if clear then clearTexture(t, rects) end
-	S.clip = rects
+	-- like the game's helper the scissor rectangles limit only the clear: drawing outside them lands in the texture
+	-- too (and stays there until a clear covers it). HARNESS.r2tClip = true restores the old clipped drawing.
+	S.clip = HARNESS.r2tClip and rects or nil
 	S.blendOn, S.bsrc, S.bdst = true, "SRC_ALPHA", "ONE_MINUS_SRC_ALPHA"
 	local ok, err = pcall(fn, ...)
 	for k in pairs(S) do S[k] = nil end

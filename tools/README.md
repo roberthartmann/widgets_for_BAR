@@ -39,7 +39,7 @@ Exact (follows GL): geometry, skew, chamfers, matrices (rotation about z only), 
 (FlowUI gradients), blend factors (on premultiplied targets; render targets accumulate alpha like
 `BlendFuncSeparate(..., ONE, ONE_MINUS_SRC_ALPHA)`, additive draws keep the target alpha), scissor, the
 texture matrix (scrolling energy glow), Spring texture flags `n` `l` `g` `i` `c` `rW,H`, render-to-texture
-clears (scissor lists clear only those rectangles and clip the drawing to them).
+clears (scissor lists clear only those rectangles and limit only the clear, not the drawing (the documented R2tHelper behaviour); `--r2t-clip` restores clipping).
 
 Approximations: antialiased edges (the game draws the UI without multisampling); bilinear sampling with one
 mip level per triangle (no trilinear); text is Pillow/FreeType with Poppins-Regular (font 1) and

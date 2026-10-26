@@ -262,7 +262,7 @@ local storageScissors = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } }
 local activeStorageScissors = { nil, nil }
 
 -- Buildpower (all BP state lives in these three tables; see design/integration_design.md)
-local bp = { cfg = { enabled = true, widthFraction = 1 / 6, indicators = true, windRange = true,
+local bp = { cfg = { enabled = true, indicators = true, windRange = true,
 	alerts = true, icon = true, debugTooltip = false } } -- data fields: bpTrack.reset, spec section 11
 local bpTrack = { perFrame = 20, frameStep = 3 } -- unit tracking state, filled by bpTrack.reset
 local bpUi = { last = {}, s = {}, hang = 0 } -- render caches and draw functions; hang: how far the gauge reaches under the bar
@@ -402,6 +402,21 @@ local function short(n, f)
 	shortCache[key] = result
 	shortCacheCount = shortCacheCount + 1
 	return result
+end
+
+-- ND: income / pull column: at most 3 digits plus a unit (815, 1.9k, 12k, 815k, 1.2m, 12m), so the narrow column
+-- seldom has to shrink a number (stock short() prints 1000 to 9999 with 4 digits)
+function bpUi.piText(n)
+	if n < 999.5 then
+		return stringFormat("%.0f", n)
+	elseif n < 9950 then
+		return stringFormat("%.1fk", n / 1000)
+	elseif n < 999500 then
+		return stringFormat("%.0fk", n / 1000)
+	elseif n < 9950000 then
+		return stringFormat("%.1fm", n / 1000000)
+	end
+	return stringFormat("%.0fm", n / 1000000)
 end
 
 
@@ -549,8 +564,9 @@ local function updateResbarText(res, force)
 		end
 	end
 
-	if cache.lastPullIncomeText[res] ~= short(r[res][3]) .. " " .. short(r[res][4]) then
-		cache.lastPullIncomeText[res] = short(r[res][3]) .. " " .. short(r[res][4])
+	local piText = bpUi.piText(r[res][3]) .. " " .. bpUi.piText(r[res][4]) -- ND: what bpUi.drawPullIncome prints
+	if cache.lastPullIncomeText[res] ~= piText then
+		cache.lastPullIncomeText[res] = piText
 		updateRes[res][2] = true
 	end
 
@@ -658,7 +674,7 @@ local function updateResbarText(res, force)
 						-- ND: under the section (top edge on its bottom edge), right aligned at its bottom right corner
 						local bannerRightX = resbarArea[res][3]
 							- bgpadding
-							- (res == "energy" and cfg.useSkew and (resbarArea[res][4] - resbarArea[res][2]) * skewTan or 0)
+							- (res == "energy" and (resbarArea[res][4] - resbarArea[res][2]) * bpUi.g.eTan or 0)
 						local bannerTop = resbarArea[res][2]
 
 						RectRound(
@@ -1380,7 +1396,7 @@ bpUi.D = {
 	knobW = 0.234, knobH = 0.3125,
 	lineTop = 0.298, lineBot = 0.673, -- centres of the two text lines
 	fsPI = 0.308, fsSt = 0.26, fsCur = 0.368, fsPct = 0.287, fsRange = 0.223, -- font sizes
-	piSignM = 4.711, piNumM = 4.539, piSignE = 4.07, piNumE = 4.682, piGap = 0.18, -- income / pull: sign centre, number edge
+	piSignM = 4.711, piNumM = 4.539, piSignE = 4.07, piNumE = 4.682, -- income / pull: sign centre, number edge
 	glyphM = 3.913, storTextM = 3.498, storTextE = 3.845, storGapE = 0.139, glyphW = 0.228, glyphH = 0.227, glyphY = 0.676,
 	curM = 1.5625, curE = 1.523, -- current value: metal right edge, energy left edge
 	plateX = 1.295, plateY = 0.68, plateS = 0.29, boltX = 1.269, boltY = 0.6875, boltS = 0.37, -- icons: centre, visible size
@@ -1715,9 +1731,13 @@ function bpUi.layout(width)
 	local D, g = bpUi.D, bpUi.g
 	local H = topbarArea[4] - topbarArea[2]
 	local totalWidth = topbarArea[3] - topbarArea[1]
-	local small = D.windW + (displayTidalSpeed and D.tidalW or 0) + (displayComCounter and D.comsW or 0)
-	local avail = totalWidth - mathFloor(totalWidth / 4) - 2 * widgetSpaceMargin
-	local k = mathMin(1, avail / ((D.metalL + D.smallX + small + D.shadowSide) * H))
+	-- everything scales with k except the small panel's shadow (whole px) and the wind text, which bpUi.smallWidth
+	-- measures unscaled; 2 px cover the rounding of the segment widths
+	local scaled = D.metalL + D.smallX + (displayTidalSpeed and D.tidalW or 0) + (displayComCounter and D.comsW or 0)
+	local windText = (font2:GetTextWidth(maxWind .. ".0") * D.fsCur
+		+ font2:GetTextWidth(minWind .. "-" .. maxWind) * D.fsRange + 0.08) * H
+	local avail = totalWidth - mathFloor(totalWidth / 4) - 2 * widgetSpaceMargin - mathFloor(D.shadowSide * H + 0.5) - 2
+	local k = mathMin(1, avail / ((scaled + D.windW) * H), (avail - windText) / ((scaled + D.windTextX + D.rangeGap) * H))
 	local x0 = topbarArea[1]
 	local gc = x0 + D.metalL * H * k
 	g.H, g.T, g.B, g.k, g.hx, g.gc = H, topbarArea[4], topbarArea[2], k, H * k, gc
@@ -1948,8 +1968,8 @@ function bpUi.resLayout(res)
 	end
 	di.trackShadow = bpUi.move(di.track, 0, -mathFloor(D.barShadow * H + 0.5))
 	di.trackStops = bpUi.stops(bpUi.C.track, ty, ty - by)
-	-- texts: sizes, baselines (digits centred on the line), anchors
-	local sPI, sSt, sCur = D.fsPI * H, D.fsSt * H, D.fsCur * H
+	-- texts: sizes (compressed with the positions), baselines (digits centred on the line), anchors
+	local sPI, sSt, sCur = D.fsPI * H * g.k, D.fsSt * H * g.k, D.fsCur * H * g.k
 	di.fsPI, di.fsSt, di.fsCur = sPI, sSt, sCur
 	local lineTop, lineBot = T - D.lineTop * H, T - D.lineBot * H
 	di.baseTopPI, di.baseBotPI = lineTop - capH * sPI * 0.5, lineBot - capH * sPI * 0.5
@@ -1959,23 +1979,34 @@ function bpUi.resLayout(res)
 	local icon, iconS, iconVis
 	local m = mathMax(1, mathFloor(H * 0.03 + 0.5)) -- margin of the clear rects
 	local lowTop = mathFloor(T - (D.barTop + D.barH + D.barShadow) * H - m) -- below the track shadow
+	-- income / pull column (bpUi.printSigned shrinks numbers wider than piMaxWTop / piMaxWBot): the upper row stays
+	-- clear of the share knob at share level 1 (at the outer end of the track; 1.2 x as big when hovered), the lower
+	-- row of the storage text, and both stay inside clearPI. The knobs keep their size when the layout is compressed.
+	local knobHalf = D.knobW * H * 0.5
 	if isMetal then
 		di.piRight, di.piSignX, di.piNumX = false, gc - D.piSignM * hx, gc - D.piNumM * hx
 		local glyphX = gc - D.glyphM * hx
 		di.glyph = { glyphX, glyphY, gw, gh }
-		di.piMaxW = glyphX - m - di.piNumX
+		local clearR = mathFloor(glyphX - m) -- right edge of clearPI
+		di.piMaxWBot = clearR - 1 - di.piNumX
+		di.piMaxWTop = mathMin(clearR - 1, x1 - knobHalf * 1.2 - m) - di.piNumX
 		di.storX, di.storRight = gc - D.storTextM * hx, false
 		di.curX, di.curRight = gc - D.curM * hx, true
 		iconVis = D.plateS * H
 		iconS = iconVis / 0.606 -- metal.png: the plate covers 0.606 of the texture
 		icon = { gc - D.plateX * hx, T - D.plateY * H }
 		di.iconTex = ":lr" .. mathFloor(iconS * 2) .. "," .. mathFloor(iconS * 2) .. ":LuaUI/Images/metal.png"
-		di.clearPI = { 0, 0, mathFloor(glyphX - m) - x0, H }
+		di.clearPI = { 0, 0, clearR - x0, H }
 		local iconLeft = mathFloor(icon[1] - iconVis * 0.5 - 1)
-		di.clearCurrent = { mathFloor(glyphX - m) - x0, 0, iconLeft - mathFloor(glyphX - m), lowTop - y0 }
+		di.clearCurrent = { clearR - x0, 0, iconLeft - clearR, lowTop - y0 }
 	else
-		di.piRight, di.piSignX, di.piNumX = true, gc + D.piSignE * hx, gc + D.piNumE * hx
-		di.piMaxW = di.piNumX - (x2 + m) - D.piGap * hx
+		-- the sign keeps its mockup place, moved right as far as the hovered knob at share level 1 needs (about 1 px
+		-- at k = 1, more in compressed layouts), and the number, right aligned, may grow left up to it
+		local signHalf = mathMax(font2:GetTextWidth("+"), font2:GetTextWidth("-")) * sPI * 0.5
+		local signX = mathMax(gc + D.piSignE * hx, x2 + knobHalf * 1.2 + signHalf) -- also keeps the sign inside clearPI
+		di.piRight, di.piSignX, di.piNumX = true, signX, gc + D.piNumE * hx
+		di.piMaxWTop = di.piNumX - (signX + signHalf + m)
+		di.piMaxWBot = di.piMaxWTop
 		di.glyph = { 0, glyphY, gw, gh }
 		di.storX, di.storRight, di.storGap = gc + D.storTextE * hx, true, D.storGapE * hx
 		di.curX, di.curRight = gc + D.curE * hx, false
@@ -2094,29 +2125,25 @@ function bpUi.drawKnobs(res, barArea, big)
 end
 
 -- texts (render-to-texture into uiTex, from renderResbarText); shadow instead of an outline
-function bpUi.printSigned(di, sign, num, y, col)
+-- income / pull: the sign at a fixed centre, the number from a fixed edge (metal: left, energy: right) into the
+-- column of width maxW; longer numbers are shrunk, sign included
+function bpUi.printSigned(di, sign, num, y, col, maxW)
 	local s = di.fsPI
 	local w = font2:GetTextWidth(num) * s
-	if w > di.piMaxW then -- shrink long numbers into the column
-		s = s * di.piMaxW / w
-		w = di.piMaxW
+	if w > maxW then
+		s = s * maxW / w
 	end
 	font2:SetTextColor(col[1], col[2], col[3], col[4])
-	if di.piRight then
-		font2:Print(num, di.piNumX, y, s, "rs")
-		font2:Print(sign, mathMin(di.piSignX, di.piNumX - w - bpUi.D.piGap * bpUi.g.hx), y, s, "cs")
-	else
-		font2:Print(sign, di.piSignX, y, s, "cs")
-		font2:Print(num, di.piNumX, y, s, "s")
-	end
+	font2:Print(sign, di.piSignX, y, s, "cs")
+	font2:Print(num, di.piNumX, y, s, di.piRight and "rs" or "s")
 end
 
 function bpUi.drawPullIncome(res)
 	local di, C = resbarDrawinfo[res], bpUi.C
 	font2:Begin(true)
 	font2:SetOutlineColor(0, 0, 0, 0.6)
-	bpUi.printSigned(di, "+", short(r[res][4]), di.baseTopPI, C.green)
-	bpUi.printSigned(di, "-", short(r[res][3]), di.baseBotPI, C.red)
+	bpUi.printSigned(di, "+", bpUi.piText(r[res][4]), di.baseTopPI, C.green, di.piMaxWTop)
+	bpUi.printSigned(di, "-", bpUi.piText(r[res][3]), di.baseBotPI, C.red, di.piMaxWBot)
 	font2:End()
 end
 
@@ -2577,6 +2604,9 @@ function bpUi.drawAlerts()
 	local bannerH = 15.5 * ws
 	local pad = 2.2 * ws
 	local x, top = a[3], resbarDrawinfo.BP.yBot
+	if dlist.resbar.metal[7] then -- the metal overflow banner hangs under metal: start below it
+		top = mathMin(top, bpUi.g.B - bannerH - 1)
+	end
 	local c = bpUi.col
 	for i = 1, #bpUi.alerts do
 		if bpUi.alertOn[i] then
@@ -2637,8 +2667,9 @@ function bpUi.slowUpdate()
 			bpUi.alertSince = now + 1.1
 		end
 		if bpUi.alertSince < now then
-			if mask ~= bpUi.alertMask or not dlist.resbar.BP[7] then
-				bpUi.alertMask = mask
+			local banner = dlist.resbar.metal[7] ~= nil -- bpUi.drawAlerts moves the boxes below it
+			if mask ~= bpUi.alertMask or banner ~= bpUi.alertBanner or not dlist.resbar.BP[7] then
+				bpUi.alertMask, bpUi.alertBanner = mask, banner
 				if dlist.resbar.BP[7] then
 					glDeleteList(dlist.resbar.BP[7])
 				end
@@ -2768,8 +2799,6 @@ end
 bpUi.optionSpecs = {
 	{ key = "enabled", type = "bool", relayout = true, name = "Buildpower gauge",
 		description = "Show the round buildpower gauge between metal and energy" },
-	{ key = "widthFraction", type = "slider", min = 0.10, max = 0.25, step = 0.01, relayout = true,
-		name = "Buildpower gauge size", description = "Share of the metal and energy width given to the buildpower gauge (in narrow sections the ring gets smaller)" },
 	{ key = "indicators", type = "bool", name = "Eco support indicators",
 		description = "Estimate how much buildpower is supported by your metal and energy income" },
 	{ key = "windRange", type = "bool", name = "Wind range indicator",
@@ -2832,7 +2861,6 @@ end
 
 -- from Initialize (SetConfigData already ran)
 function bpUi.initialize()
-	bp.cfg.widthFraction = mathMin(0.25, mathMax(0.10, bp.cfg.widthFraction))
 	bpUi.addOptions()
 	WG.buildpower = { GetData = bpUi.getData, version = 1 }
 end
@@ -2918,7 +2946,8 @@ function init()
 		updateComs()
 	end
 	bpUi.smallLayout(windArea[1], topbarArea[1] + filledWidth, topbarArea[2] + smallVPad) -- ND: the joined panel
-	filledWidth = filledWidth + widgetSpaceMargin
+	-- ND: the free area starts after the panel's drop shadow
+	filledWidth = filledWidth + mathFloor(bpUi.D.shadowSide * (topbarArea[4] - topbarArea[2]) + 0.5) + widgetSpaceMargin
 
 	-- the button strip is drawn by the Top Bar Buttons widget; this is the width it
 	-- reserves on the right, which GetFreeArea and GetPosition below report
@@ -2927,7 +2956,8 @@ function init()
 
 	if WG.topbar then
 		WG.topbar.GetPosition = function()
-			local leftSkewOffset = cfg.useSkew and mathFloor((topbarArea[4] - topbarArea[2]) * skewTan) or 0
+			-- ND: metal's bottom left corner; the panels are slanted also on builds without the skew drawers
+			local leftSkewOffset = mathFloor((topbarArea[4] - topbarArea[2]) * bpUi.D.metalTan)
 			return {
 				topbarArea[1] + leftSkewOffset + widgetSpaceMargin,
 				topbarArea[2],
@@ -2939,18 +2969,22 @@ function init()
 		end
 
 		WG.topbar.GetFreeArea = function()
+			local x2 = topbarArea[3] - width - widgetSpaceMargin
 			return {
-				topbarArea[1] + filledWidth,
+				mathMin(topbarArea[1] + filledWidth, x2), -- ND: an empty area rather than an inverted one
 				topbarArea[2],
-				topbarArea[3] - width - widgetSpaceMargin,
+				x2,
 				topbarArea[4],
 				widgetScale,
 			}
 		end
+		-- ND: always slanted; skewTan is the slope of the small panel's right edge, which the element placed in the
+		-- free area (the converter usage) continues; leftSkewTan is metal's outer edge (GetPosition's left offset)
 		WG.topbar.GetSkewConfig = function()
 			return {
-				useSkew = cfg.useSkew,
-				skewTan = skewTan,
+				useSkew = true,
+				skewTan = bpUi.D.smallTanR,
+				leftSkewTan = bpUi.D.metalTan,
 				smallElementHeightFraction = cfg.smallElementHeightFraction,
 			}
 		end
@@ -3854,7 +3888,7 @@ end
 
 
 function widget:MousePress(x, y, button)
-	if button == 1 then
+	if button == 1 and showResourceBars then -- ND: the knobs are not there while the bars are hidden
 		if not spec then
 			do -- ND: the share knobs are shown (and work) in single-player teams too
 				if
@@ -4207,10 +4241,9 @@ end
 function widget:SetConfigData(data)
 	if type(data) == "table" and type(data.bp) == "table" then
 		for k, v in pairs(data.bp) do
-			if bp.cfg[k] ~= nil and type(v) == type(bp.cfg[k]) then
+			if bp.cfg[k] ~= nil and type(v) == type(bp.cfg[k]) then -- unknown keys (the old widthFraction) are dropped
 				bp.cfg[k] = v
 			end
 		end
 	end
-	bp.cfg.widthFraction = math.min(0.25, math.max(0.10, bp.cfg.widthFraction))
 end

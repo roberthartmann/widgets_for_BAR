@@ -6,13 +6,13 @@ Usage:
          [--legacy] [--frames 200] [--compare mockup.png] [--crop auto|full|x1,y1,x2,y2] [--scale N]
          [--ss 2] [--bg R,G,B|transparent] [--font-scale 0.95] [--no-coms] [--no-tidal]
          [--calm] [--bp-used F] [--bp-reserved F] [--bp-msupport F] [--bp-esupport F]
-         [--bp-wind-min F --bp-wind-max F] [--mm-level F] [--share-metal F] [--share-energy F]
+         [--bp-wind-min F --bp-wind-max F] [--mm-level F] [--share-metal F] [--share-energy F] [--r2t-clip]
 
 Runs the widget lifecycle like run_widget.py (mock_env.lua) with the REAL stock FlowUI
 (stock_reference/gui_flowui.lua) and a recording gl layer (mock_gl_record.lua), then draws the last
 DrawScreen with a small software rasteriser: Gouraud-shaded triangles with GL blending, bilinear
-textures from tools/assets, render-to-texture layers, scissor, and text via Pillow (Poppins-Regular /
-Exo2-SemiBold). Needs `pip install lupa` and Pillow + numpy.
+textures from tools/assets, render-to-texture layers (scissor lists limit the clear, not the drawing),
+scissor, and text via Pillow (Poppins-Regular / Exo2-SemiBold). Needs `pip install lupa` and Pillow + numpy.
 """
 import argparse
 import math
@@ -687,6 +687,7 @@ def run_widget(args, fonts):
     g.PY_FILE_EXISTS = py_file_exists
     rt.execute(lua_text(os.path.join(TOOLS, "mock_env.lua")))
     g.HARNESS.barRoot = os.path.join(REPO, "stock_reference")
+    g.HARNESS.r2tClip = bool(getattr(args, "r2t_clip", False))
     rt.execute(SETUP, args.vsx, args.vsy, args.ui_scale, not args.no_coms, not args.no_tidal, args.wind,
                args.mm_level, args.share_metal, args.share_energy)
     rt.execute(lua_text(os.path.join(TOOLS, "mock_gl_record.lua")))
@@ -718,14 +719,15 @@ def topbar_box(rt, vsx, vsy):
         boxes.append((float(e[1]), float(e[2]), float(e[3]), float(e[4])))
     if not boxes:
         # the widget draws its elements without FlowUI's Element: use the area it publishes in WG.topbar
-        # (GetPosition reports the left edge plus the full slant of the first element and the element margin)
+        # (GetPosition reports the left edge plus the full slant of the first element and the element margin;
+        # GetSkewConfig's leftSkewTan, when given, is the slope of that edge, skewTan otherwise)
         pos = rt.eval("""function()
           local t = WG.topbar
           if not (t and t.GetPosition) then return nil end
           local p = t.GetPosition()
           local skew = t.GetSkewConfig and t.GetSkewConfig() or {}
           local H = p[4] - p[2]
-          local off = skew.useSkew and math.floor(H * (skew.skewTan or 0)) or 0
+          local off = skew.useSkew and math.floor(H * (skew.leftSkewTan or skew.skewTan or 0)) or 0
           return { p[1] - off - (WG.FlowUI.elementMargin or 0), p[2], p[3], p[4] }
         end""")()
         if pos is None:
@@ -775,6 +777,9 @@ def main():
     ap.add_argument("--mm-level", type=float, default=None, help="conversion slider level (mmLevel rules param, default 0.8)")
     ap.add_argument("--share-metal", type=float, default=None, help="metal share level (default 0.99)")
     ap.add_argument("--share-energy", type=float, default=None, help="energy share level (default 0.9)")
+    ap.add_argument("--r2t-clip", action="store_true",
+                    help="clip render-to-texture drawing to the scissor rectangles (old harness behaviour; the game's "
+                         "helper limits only the clear to them, so drawing outside accumulates in the texture)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
