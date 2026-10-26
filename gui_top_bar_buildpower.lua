@@ -61,7 +61,7 @@ local cfg = {
 	bladeSpeedMultiplier = 0.2,
 	escapeKeyPressesQuit = false,
 	allowSavegame = true, -- Spring.Utilities.ShowDevUI()
-	spawnWarpInFrame = Game.spawnWarpInFrame,
+	spawnWarpInFrame = Game.spawnWarpInFrame or 90, -- compat: constant added Feb 2026
 	useSkew = true, -- toggle trapezoidal/parallelogram skew on all UI elements
 	skewAngleDeg = 20, -- angle of skew slope in degrees
 	smallElementHeightFraction = 0.85, -- wind/tidal/coms/buttons height as fraction of topbar
@@ -101,6 +101,16 @@ local avgWindValue, riskWindValue
 local currentWind = 0
 local currentWindText = "\255\255\255\2550"
 local prevWind = nil
+-- Compatibility: user widgets on game builds before July 2026 have no BAR module table.
+-- Take what exists and fall back to the older Spring equivalents (one extra local).
+local BAR = {
+	I18N = (BAR and BAR.I18N) or Spring.I18N or function(key)
+		return key
+	end,
+	Lava = (BAR and BAR.Lava) or Spring.Lava or {
+		isLavaMap = Spring.GetModOptions().map_waterislava == true or (Game.waterDamage or 0) > 0,
+	},
+}
 local displayTidalSpeed = not BAR.Lava.isLavaMap
 local tidalSpeed = Spring.GetTidal() -- for now assumed that it is not dynamically changed
 local tidalSpeedText = "\255\255\255\255" .. tostring(tidalSpeed)
@@ -112,7 +122,26 @@ local minWindText = "\255\166\166\166" .. tostring(minWind)
 local maxWindText = "\255\166\166\166" .. tostring(maxWind)
 local noWindText1 = "\255\200\200\200" .. BAR.I18N("ui.topbar.wind.nowind1")
 local noWindText2 = "\255\200\200\200" .. BAR.I18N("ui.topbar.wind.nowind2")
-local windFunctions = require("common/wind_functions")
+local windFunctions
+do -- Compatibility: require() is refused or missing for user widgets on builds before Oct 2026
+	local ok, mod = pcall(require, "common/wind_functions")
+	if not (ok and type(mod) == "table") then
+		ok, mod = pcall(VFS.Include, "common/wind_functions.lua", nil, VFS.ZIP)
+	end
+	if ok and type(mod) == "table" then
+		windFunctions = mod
+	else -- same approximations the module falls back to when the lookup tables have no entry
+		windFunctions = {
+			averageWindLookup = {},
+			getWindRisk = function()
+				return (Game.windMin + Game.windMax >= 0.5) and "0" or "100"
+			end,
+			isNoWind = function()
+				return (Game.windMin + Game.windMax) < 0.5
+			end,
+		}
+	end
+end
 local noWind = windFunctions.isNoWind() -- constant per game: Game.windMin/windMax never change
 
 local function refreshWindTidalTextCache()
@@ -299,6 +328,17 @@ function widget:ViewResize()
 	widgetSpaceMargin = WG.FlowUI.elementMargin
 	bgpadding = WG.FlowUI.elementPadding
 	RectRound = WG.FlowUI.Draw.RectRound
+	-- Compatibility: older FlowUI without the skewed quad (May 2026) or the outline (Nov 2025) drawers.
+	-- Only added when missing, so other widgets are unaffected.
+	if not WG.FlowUI.Draw.RectRoundQuad then
+		cfg.useSkew = false
+		WG.FlowUI.Draw.RectRoundQuad = function(px, py, sx, sy, cs, tl, tr, br, bl, c1, c2)
+			return RectRound(px, py, sx, sy, cs, tl, tr, br, bl, c1, c2)
+		end
+	end
+	if not WG.FlowUI.Draw.RectRoundOutline then
+		WG.FlowUI.Draw.RectRoundOutline = function() end
+	end
 	RectRoundOutline = WG.FlowUI.Draw.RectRoundOutline
 	TexturedRectRound = WG.FlowUI.Draw.TexturedRectRound
 	UiElement = WG.FlowUI.Draw.Element
@@ -2511,6 +2551,9 @@ end
 
 -- from the stock 0.5 s block of Update: another resource top bar overwrote our WG.topbar closures
 function bpUi.checkConflict()
+	if bpUi.checkButtons then
+		bpUi.checkButtons()
+	end
 	if bpUi.warned or not bpUi.ownGetPosition or not WG.topbar then
 		return
 	end
@@ -3002,6 +3045,23 @@ local function provideButtonFallbacks()
 	provide("setAutoHideButtons", returnNil)
 	provide("getAutoHideButtons", returnFalse)
 	provide("getShowButtons", returnFalse)
+end
+
+-- BP: called every 0.5 s; warns once if, after about 10 s, no "Top Bar Buttons" widget has taken over
+-- its half of WG.topbar. Game builds before Sep 2026 have the buttons inside the stock Top Bar,
+-- so this fork cannot show them there.
+function bpUi.checkButtons()
+	if bpUi.buttonsChecked then
+		return
+	end
+	bpUi.buttonsTicks = (bpUi.buttonsTicks or 0) + 1
+	if bpUi.buttonsTicks < 20 then
+		return
+	end
+	bpUi.buttonsChecked = true
+	if WG.topbar and fallback.showingQuit and WG.topbar.showingQuit == fallback.showingQuit then
+		Spring.Echo(widget:GetInfo().name .. ': no "Top Bar Buttons" widget found. Your game build keeps the menu buttons inside the stock "Top Bar", so they are missing while this widget replaces it. Copy stock_reference/gui_top_bar_buttons.lua from the repository into LuaUI/Widgets to get them back.')
+	end
 end
 
 local function removeButtonFallbacks()

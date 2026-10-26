@@ -1,12 +1,16 @@
 """Run a BAR top bar widget headlessly through its lifecycle under Lua 5.1.
-Usage: python3 -I tools/run_widget.py <widget.lua> [bar_root=stock_reference]
+Usage: python3 -I tools/run_widget.py <widget.lua> [bar_root=stock_reference] [--legacy]
+--legacy simulates a spring-2026 game build (no BAR table, no require, no skew drawers).
 Needs `pip install lupa`. bar_root must contain common/wind_functions.lua."""
 import sys
 from lupa import lua51
 rt = lua51.LuaRuntime(unpack_returned_tuples=True)
-path = sys.argv[1]
-bar_root = sys.argv[2] if len(sys.argv) > 2 else "stock_reference"
+legacy = "--legacy" in sys.argv
+args = [a for a in sys.argv[1:] if a != "--legacy"]
+path = args[0]
+bar_root = args[1] if len(args) > 1 else "stock_reference"
 tools = __file__.rsplit("/", 1)[0]
+rt.globals()["HARNESS_LEGACY"] = legacy
 rt.execute(open(f"{tools}/mock_env.lua").read())
 rt.globals()["HARNESS"]["barRoot"] = bar_root
 src = open(path, encoding="utf-8", errors="replace").read()

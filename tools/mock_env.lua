@@ -185,3 +185,13 @@ widgetHandler = {
   knownWidgets = {},
 }
 widget = setmetatable({}, { __index = function(t, k) return nil end })
+
+-- LEGACY mode (run_widget.py --legacy): a game build from spring 2026, before the BAR module table,
+-- require() for user widgets, Game.spawnWarpInFrame and the skewed FlowUI drawers existed.
+if HARNESS_LEGACY then
+  BAR = nil
+  require = nil
+  Game.spawnWarpInFrame = nil
+  Spring.I18N = function(key) return key end
+  WG.FlowUI.Draw = { RectRound = noop, TexturedRectRound = noop, Element = noop, SliderKnob = noop }
+end
