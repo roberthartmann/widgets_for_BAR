@@ -19,11 +19,17 @@ end
 -- the stock gui_top_bar.lua (see stock_reference/COMMIT.txt for the exact BAR revision)
 -- plus buildpower (BP) tracking. The BP numbers, alerts, tooltip and options are the same;
 -- only the look differs:
--- * BP is a round gauge between metal and energy: a 270 degree ring (used / reserved /
---   idle), eco support ticks and a wind range arc outside the ring, a builder icon in the
---   centre and the percent text under it. Its background hangs below the top bar.
+-- * The look follows the design mockup (design/mockup_measurements.md, sizes in units of the
+--   strip height in bpUi.D / bpUi.C): opaque panels with sharp corners and 42.5 degree outer
+--   slants, hard drop shadows, metal | gauge | energy touching, wind / tidal / coms as one panel.
+-- * BP is a round gauge between metal and energy: a 216 degree ring with round caps (used /
+--   reserved / idle), the energy support marker and the wind range arc outside the ring, the
+--   metal support pointer inside it, a hexagon icon and the percent text. Its panel hangs below
+--   the top bar.
 -- * Metal and energy mirror each other around the gauge: the income/pull column on the
---   outer side, the fill bar on the upper row, storage and current value on the lower row.
+--   outer side, the fill bar on the upper row (metal fills from the gauge outward), storage and
+--   current value with the resource icon on the lower row. Both have a red share knob (also in
+--   single-player teams), energy the white conversion knob.
 --   The overflow/wasting banner hangs under its section, so it covers no numbers.
 -- BP hooks in stock functions are marked "-- BP", layout changes in stock functions
 -- "-- ND"; the BP state lives in the tables bp / bpTrack / bpUi (one block of functions
@@ -68,8 +74,8 @@ local cfg = {
 	allowSavegame = true, -- Spring.Utilities.ShowDevUI()
 	spawnWarpInFrame = Game.spawnWarpInFrame or 90, -- compat: constant added Feb 2026
 	useSkew = true, -- toggle trapezoidal/parallelogram skew on all UI elements
-	skewAngleDeg = 20, -- angle of skew slope in degrees
-	smallElementHeightFraction = 0.85, -- wind/tidal/coms/buttons height as fraction of topbar
+	skewAngleDeg = 42.5, -- angle of skew slope in degrees (ND: the mockup slant)
+	smallElementHeightFraction = 0.64, -- wind/tidal/coms/buttons height as fraction of topbar (ND: mockup)
 }
 
 -- Precomputed skew tangent (updated whenever cfg is read at init)
@@ -118,7 +124,7 @@ local BAR = {
 }
 local displayTidalSpeed = not BAR.Lava.isLavaMap
 local tidalSpeed = Spring.GetTidal() -- for now assumed that it is not dynamically changed
-local tidalSpeedText = "\255\255\255\255" .. tostring(tidalSpeed)
+local tidalSpeedText = "\255\231\220\181" .. tostring(tidalSpeed)
 local tidalWaveAnimationHeight = 10
 local windRotation = 0
 local minWind = Game.windMin
@@ -150,7 +156,7 @@ end
 local noWind = windFunctions.isNoWind() -- constant per game: Game.windMin/windMax never change
 
 local function refreshWindTidalTextCache()
-	tidalSpeedText = "\255\255\255\255" .. tostring(tidalSpeed)
+	tidalSpeedText = "\255\231\220\181" .. tostring(tidalSpeed)
 	minWindText = "\255\166\166\166" .. tostring(minWind)
 	maxWindText = "\255\166\166\166" .. tostring(maxWind)
 	noWindText1 = "\255\200\200\200" .. BAR.I18N("ui.topbar.wind.nowind1")
@@ -408,43 +414,7 @@ local function updateComs(forceText)
 		glDeleteList(dlist.coms)
 	end
 	comsDlistUpdate = true
-	dlist.coms = glCreateList(function()
-		-- Commander icon
-		local areaH = area[4] - area[2]
-		local sizeHalf = areaH / 2.44
-		local yOffset = ((area[3] - area[1]) * 0.025)
-		-- Parallelogram visual center is shifted left; correct content to the right.
-		local skewCenterOffset = cfg.useSkew and areaH * skewTan * 0.5 or 0
-		local cx = area[1] + ((area[3] - area[1]) / 2) - skewCenterOffset
-		if VFS.FileExists(texPath) then
-			glTexture(textures.com)
-			glTexRect(
-				cx - sizeHalf,
-				area[2] + (areaH / 2) - sizeHalf + yOffset,
-				cx + sizeHalf,
-				area[2] + (areaH / 2) + sizeHalf + yOffset
-			)
-			glTexture(false)
-		end
-		-- Text
-		if gameFrame > 0 or forceText then
-			font2:Begin(true)
-			local fontsize = areaH / 2.5
-			font2:SetOutlineColor(0, 0, 0, 1)
-			-- Enemy count: anchor to actual bottom-right corner of parallelogram with small padding
-			local brCornerX = area[3] - (cfg.useSkew and areaH * skewTan or 0)
-			font2:Print(
-				"\255\255\000\000" .. enemyComCount,
-				brCornerX - (1.2 * widgetScale),
-				area[2] + (4.5 * widgetScale),
-				fontsize,
-				"or"
-			)
-			fontSize = areaH / 1.9
-			font2:Print("\255\000\255\000" .. allyComs, cx, area[2] + (areaH / 1.77) - (fontSize / 5), fontSize, "oc")
-			font2:End()
-		end
-	end)
+	dlist.coms = glCreateList(bpUi.drawComs, area, texPath, gameFrame > 0 or forceText) -- ND: icon, own and enemy count in a row
 
 	comcountChanged = nil
 
@@ -481,33 +451,7 @@ end
 local function updateWind()
 	local area = windArea
 
-	local bladesSize = (area[4] - area[2]) * 0.57
-
-	if dlist.wind1 then
-		glDeleteList(dlist.wind1)
-	end
-	dlist.wind1 = glCreateList(function()
-		-- blades icon
-		local skewCenterOffset = cfg.useSkew and (area[4] - area[2]) * skewTan * 0.5 or 0
-		glPushMatrix()
-		glTranslate(
-			area[1] + ((area[3] - area[1]) / 2) - skewCenterOffset,
-			area[2] + (bgpadding / 2) + ((area[4] - area[2]) / 2),
-			0
-		)
-		glColor(1, 1, 1, 0.2)
-		glTexture(textures.blades)
-		-- gl.Rotate is done after displaying this dl, and before dl2
-	end)
-
-	if dlist.wind2 then
-		glDeleteList(dlist.wind2)
-	end
-	dlist.wind2 = glCreateList(function()
-		glTexRect(-bladesSize, -bladesSize, bladesSize, bladesSize)
-		glTexture(false)
-		glPopMatrix()
-	end)
+	bpUi.windLists(area) -- ND: blades icon with a shadow at the left of the wind segment
 
 	if WG.tooltip and refreshUi then
 		local avgWindValueForTooltip = noWind and BAR.I18N("ui.topbar.wind.nowind1") or avgWindValue
@@ -550,16 +494,8 @@ local function updateTidal()
 	if dlist.tidal2 then
 		glDeleteList(dlist.tidal2)
 	end
-	local wavesSize = (area[4] - area[2]) * 0.59
-	tidalWaveAnimationHeight = (area[4] - area[2]) * 0.1
-
-	dlist.tidal2 = glCreateList(function()
-		glColor(1, 1, 1, 0.2)
-		glTexture(textures.waves)
-		glTexRect(-wavesSize, -wavesSize, wavesSize, wavesSize)
-		glTexture(false)
-		glPopMatrix()
-	end)
+	tidalWaveAnimationHeight = 0 -- ND: a static icon
+	dlist.tidal2 = glCreateList(bpUi.tidalList, area)
 
 	if WG.tooltip and refreshUi then
 		WG.tooltip.AddTooltip(
@@ -573,60 +509,13 @@ local function updateTidal()
 end
 
 local function drawResbarPullIncome(res)
-	font2:Begin(true)
-	font2:SetOutlineColor(0, 0, 0, 1)
-	-- Text: pull
-	font2:Print(
-		"\255\240\125\125" .. "-" .. short(r[res][3]),
-		resbarDrawinfo[res].textPull[2],
-		resbarDrawinfo[res].textPull[3],
-		resbarDrawinfo[res].textPull[4],
-		resbarDrawinfo[res].textPull[5]
-	)
-	-- Text: expense
-	--font2:Print("\255\240\180\145" .. "-" .. short(r[res][5]), resbarDrawinfo[res].textExpense[2], resbarDrawinfo[res].textExpense[3], resbarDrawinfo[res].textExpense[4], resbarDrawinfo[res].textExpense[5])
-	-- income
-	font2:Print(
-		"\255\120\235\120" .. "+" .. short(r[res][4]),
-		resbarDrawinfo[res].textIncome[2],
-		resbarDrawinfo[res].textIncome[3],
-		resbarDrawinfo[res].textIncome[4],
-		resbarDrawinfo[res].textIncome[5]
-	)
-	font2:End()
+	bpUi.drawPullIncome(res) -- ND: sign and number, shadowed, mockup colours and sizes
 end
 
--- ND: storage glyph (a small grey "cylinder" of two stacked rounded rects) + storage number on the
--- lower row. The overflow banner hangs under the section now, so the storage stays visible with it.
+-- ND: storage glyph (three stacked discs, line art) + storage number on the lower row. The overflow banner
+-- hangs under the section, so the storage stays visible with it.
 local function drawResbarStorage(res)
-	local t, g = resbarDrawinfo[res].textStorage, resbarDrawinfo[res].storageGlyph
-	local w = font2:GetTextWidth(cache.lastStorageText[res]) * t[4]
-	cache.lastStorageWidth[res] = w
-	local gx = (t[5] == "or" and t[2] - w or t[2]) - g[3] - g[1]
-	local half = (g[2] - 1) * 0.5
-	if res == "metal" then
-		glColor(0.55, 0.55, 0.55, 1)
-	else
-		glColor(0.57, 0.57, 0.45, 1)
-	end
-	RectRound(gx, t[3], gx + g[1], t[3] + half, g[1] * 0.3)
-	RectRound(gx, t[3] + half + 1, gx + g[1], t[3] + g[2], g[1] * 0.3)
-	font2:Begin(true)
-	font2:SetOutlineColor(0, 0, 0, 1)
-	if res == "metal" then
-		font2:SetTextColor(0.55, 0.55, 0.55, 1)
-	else
-		font2:SetTextColor(0.57, 0.57, 0.45, 1)
-	end
-	font2:Print(
-		cache.lastStorageText[res],
-		resbarDrawinfo[res].textStorage[2],
-		resbarDrawinfo[res].textStorage[3],
-		resbarDrawinfo[res].textStorage[4],
-		resbarDrawinfo[res].textStorage[5]
-	)
-	font2:End()
-	bpUi.setClear(res) -- ND: the next clear must cover what was just drawn
+	bpUi.drawStorage(res)
 end
 
 -- The quit dialog lives in the Top Bar Buttons widget; the resource bars stop
@@ -645,69 +534,7 @@ local function updateResbarText(res, force)
 		if dlist.resbar[res][4] then
 			glDeleteList(dlist.resbar[res][4])
 		end
-		dlist.resbar[res][4] = glCreateList(function()
-			if res == "metal" then
-				local skew = cfg.useSkew and { blx = (resbarArea[res][4] - resbarArea[res][2]) * skewTan } or nil
-				WG.FlowUI.Draw.RectRoundQuad(
-					resbarArea[res][1] + bgpadding,
-					resbarArea[res][2] + bgpadding,
-					resbarArea[res][3] - bgpadding,
-					resbarArea[res][4],
-					bgpadding * 1.25,
-					0,
-					0,
-					1,
-					1,
-					nil,
-					nil,
-					skew
-				)
-				WG.FlowUI.Draw.RectRoundQuad(
-					resbarArea[res][1],
-					resbarArea[res][2],
-					resbarArea[res][3],
-					resbarArea[res][4],
-					5.5 * widgetScale,
-					0,
-					0,
-					1,
-					1,
-					nil,
-					nil,
-					skew
-				)
-			else
-				local skew = cfg.useSkew and { brx = -((resbarArea[res][4] - resbarArea[res][2]) * skewTan) } or nil
-				WG.FlowUI.Draw.RectRoundQuad(
-					resbarArea[res][1] + bgpadding,
-					resbarArea[res][2] + bgpadding,
-					resbarArea[res][3] - bgpadding,
-					resbarArea[res][4],
-					bgpadding * 1.25,
-					0,
-					0,
-					1,
-					1,
-					nil,
-					nil,
-					skew
-				)
-				WG.FlowUI.Draw.RectRoundQuad(
-					resbarArea[res][1],
-					resbarArea[res][2],
-					resbarArea[res][3],
-					resbarArea[res][4],
-					5.5 * widgetScale,
-					0,
-					0,
-					1,
-					1,
-					nil,
-					nil,
-					skew
-				)
-			end
-		end)
+		dlist.resbar[res][4] = glCreateList(bpUi.fill, res == "metal" and bpUi.g.pm or bpUi.g.pe) -- ND: the panel shape
 	end
 
 	-- storage changed!
@@ -909,22 +736,7 @@ local function drawResbarValue(res)
 	local value = short(smoothedResources[res][1])
 	cache.lastDrawnValue[res] = value
 	cache.lastResbarValueWidth[res] = font2:GetTextWidth(value) * resbarDrawinfo[res].textCurrent[4]
-	font2:Begin(true)
-	if res == "metal" then
-		font2:SetTextColor(0.95, 0.95, 0.95, 1)
-	else
-		font2:SetTextColor(1, 1, 0.74, 1)
-	end
-	font2:SetOutlineColor(0, 0, 0, 1)
-	font2:Print(
-		value,
-		resbarDrawinfo[res].textCurrent[2],
-		resbarDrawinfo[res].textCurrent[3],
-		resbarDrawinfo[res].textCurrent[4],
-		resbarDrawinfo[res].textCurrent[5]
-	)
-	font2:End()
-	bpUi.setClear(res) -- ND: the next clear must cover what was just drawn
+	bpUi.drawValue(res, value) -- ND
 end
 
 -- storage is 0 when the team has no units (dead/resigned team, or before the commander spawned),
@@ -944,69 +756,21 @@ local function updateResbar(res)
 		return bpUi.updateBar()
 	end
 
-	local area = resbarArea[res]
-
 	if dlist.resbar[res][1] then
 		glDeleteList(dlist.resbar[res][1])
 		glDeleteList(dlist.resbar[res][2])
 	end
 
-	local barHeight = mathFloor((height * widgetScale / 7) + 0.5)
-	-- Extra inset on the slanted side so content stays within the trapezoidal shape.
-	-- At mid-bar-height the slanted edge has shifted inward by ~H/2 * tan(22.5 deg).
-	local skewSideInset = cfg.useSkew and mathFloor((area[4] - area[2]) * skewTan * 0.5) or 0
-	-- ND: new layout (bar on the upper row, texts around it); also sets the text positions,
+	-- ND: new layout (bar on the upper row, texts around it); also sets the text positions, the static shapes,
 	-- tooltip rects and render-to-texture clear rects in resbarDrawinfo[res]
-	local barArea = bpUi.resLayout(res, barHeight, skewSideInset)
-	local sliderHeightAdd = mathFloor(barHeight / 1.55)
-	local shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
-	local barWidth = barArea[3] - barArea[1]
-	local glowSize = barHeight * 7
-	local edgeWidth = mathMax(1, mathFloor(vsy / 1100))
+	local barArea = bpUi.resLayout(res)
 
-	if not showingQuitscreen() and resbarHover and resbarHover == res then
-		sliderHeightAdd = barHeight / 0.75
-		shareSliderWidth = barHeight + sliderHeightAdd + sliderHeightAdd
-	end
-	shareSliderWidth = mathCeil(shareSliderWidth)
-
-	-- Always update barArea so glow calculations work correctly even when refreshUi is false
+	-- Always update barArea so the fill calculations work correctly even when refreshUi is false
 	if not resbarDrawinfo[res] then
 		resbarDrawinfo[res] = {}
 	end
 	resbarDrawinfo[res].barArea = barArea
-	-- Always update barTexRect so it has current coordinates
-	resbarDrawinfo[res].barTexRect =
-		{ barArea[1], barArea[2], barArea[1] + (fillRatio(r[res][1], r[res][2]) * barWidth), barArea[4] }
-
-	-- Ensure barColor is initialized
-	if not resbarDrawinfo[res].barColor then
-		if res == "metal" then
-			resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
-		else
-			resbarDrawinfo[res].barColor = { 1, 1, 0, 1 }
-		end
-	end
-
-	if refreshUi then
-		if res == "metal" then
-			resbarDrawinfo[res].barColor = { 1, 1, 1, 1 }
-		else
-			resbarDrawinfo[res].barColor = { 1, 1, 0, 1 }
-		end
-		resbarDrawinfo[res].barArea = barArea
-
-		resbarDrawinfo[res].barTexRect =
-			{ barArea[1], barArea[2], barArea[1] + (fillRatio(r[res][1], r[res][2]) * barWidth), barArea[4] }
-		-- Glow rectangles should be relative to barArea, not barTexRect, so they don't shift when resource values change
-		resbarDrawinfo[res].barGlowMiddleTexRect =
-			{ barArea[1], barArea[2] - glowSize, barArea[3], barArea[4] + glowSize }
-		resbarDrawinfo[res].barGlowLeftTexRect =
-			{ barArea[1] - (glowSize * 2.5), barArea[2] - glowSize, barArea[1], barArea[4] + glowSize }
-		resbarDrawinfo[res].barGlowRightTexRect =
-			{ barArea[3], barArea[2] - glowSize, barArea[3] + (glowSize * 2.5), barArea[4] + glowSize }
-		-- ND: textCurrent / textStorage / textPull / textExpense / textIncome are set by bpUi.resLayout
-	else -- just update values
+	if not refreshUi then -- just update values
 		resbarDrawinfo[res].textCurrent[1] = short(r[res][1])
 		resbarDrawinfo[res].textStorage[1] = "\255\150\150\150" .. short(r[res][2])
 		resbarDrawinfo[res].textPull[1] = "\255\210\100\100" .. short(r[res][3])
@@ -1014,229 +778,12 @@ local function updateResbar(res)
 		resbarDrawinfo[res].textIncome[1] = "\255\100\210\100" .. short(r[res][4])
 	end
 
-	dlist.resbar[res][1] = glCreateList(function()
-		glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+	-- ND: icon, track and its shadow (static, baked into uiTex by drawUi)
+	dlist.resbar[res][1] = glCreateList(bpUi.drawResStatic, res)
 
-		-- Icon
-		glColor(1, 1, 1, 1)
-		local iconPadding = mathFloor((area[4] - area[2]) / 7)
-		local iconSize = mathFloor(area[4] - area[2] - iconPadding - iconPadding)
-		local bgpaddingHalf = mathFloor((bgpadding * 0.5) + 0.5)
-		local texSize = mathFloor(iconSize * 2)
-
-		if res == "metal" then
-			glTexture(":lr" .. texSize .. "," .. texSize .. ":LuaUI/Images/metal.png")
-			local iconSkewShift = skewSideInset
-			glTexRect(
-				area[1] + bgpaddingHalf + iconPadding + iconSkewShift,
-				area[2] + bgpaddingHalf + iconPadding,
-				area[1] + bgpaddingHalf + iconPadding + iconSkewShift + iconSize,
-				area[4] + bgpaddingHalf - iconPadding
-			)
-		else -- ND: a small energy glyph at the start of the lower row instead of the big icon
-			local ei = resbarDrawinfo[res].energyIcon
-			texSize = mathFloor((ei[3] - ei[1]) * 2)
-			glTexture(":lr" .. texSize .. "," .. texSize .. ":LuaUI/Images/energy.png")
-			glTexRect(ei[1], ei[2], ei[3], ei[4])
-		end
-		glTexture(false)
-
-		-- Bar background
-		local addedSize = mathFloor(((barArea[4] - barArea[2]) * 0.15) + 0.5)
-		local borderSize = 1
-		RectRound(
-			barArea[1] - edgeWidth + borderSize,
-			barArea[2] - edgeWidth + borderSize,
-			barArea[3] + edgeWidth - borderSize,
-			barArea[4] + edgeWidth - borderSize,
-			barHeight * 0.2,
-			1,
-			1,
-			1,
-			1,
-			{ 0, 0, 0, 0.15 },
-			{ 0, 0, 0, 0.2 }
-		)
-
-		-- bar dark outline
-		local featherHeight = addedSize * 4
-		WG.FlowUI.Draw.RectRoundOutline(
-			barArea[1] - addedSize - featherHeight - edgeWidth,
-			barArea[2] - addedSize - featherHeight - edgeWidth,
-			barArea[3] + addedSize + featherHeight + edgeWidth,
-			barArea[4] + addedSize + featherHeight + edgeWidth,
-			barHeight * 0.8,
-			featherHeight,
-			1,
-			1,
-			1,
-			1,
-			{ 0, 0, 0, 0 },
-			{ 0, 0, 0, 0.22 }
-		)
-		featherHeight = addedSize
-		WG.FlowUI.Draw.RectRoundOutline(
-			barArea[1] - addedSize - featherHeight - edgeWidth,
-			barArea[2] - addedSize - featherHeight - edgeWidth,
-			barArea[3] + addedSize + featherHeight + edgeWidth,
-			barArea[4] + addedSize + featherHeight + edgeWidth,
-			featherHeight * 1.5,
-			featherHeight,
-			1,
-			1,
-			1,
-			1,
-			{ 0, 0, 0, 0 },
-			{ 0, 0, 0, 0.66 }
-		)
-
-		-- bar inner light outline
-		WG.FlowUI.Draw.RectRoundOutline(
-			barArea[1] - addedSize - edgeWidth,
-			barArea[2] - addedSize - edgeWidth,
-			barArea[3] + addedSize + edgeWidth,
-			barArea[4] + addedSize + edgeWidth,
-			barHeight * 0.33,
-			barHeight * 0.1,
-			1,
-			1,
-			1,
-			1,
-			{ 1, 1, 1, 0.3 },
-			{ 1, 1, 1, 0 }
-		)
-
-		glBlending(GL.SRC_ALPHA, GL.ONE)
-		glTexture(textures.noiseBackground)
-		glColor(1, 1, 1, 0.88)
-		TexturedRectRound(
-			barArea[1] - edgeWidth,
-			barArea[2] - edgeWidth,
-			barArea[3] + edgeWidth,
-			barArea[4] + edgeWidth,
-			barHeight * 0.33,
-			1,
-			1,
-			1,
-			1,
-			barWidth * 0.33,
-			0
-		)
-		glTexture(false)
-		RectRound(
-			barArea[1] - addedSize - edgeWidth,
-			barArea[2] - addedSize - edgeWidth,
-			barArea[3] + addedSize + edgeWidth,
-			barArea[4] + addedSize + edgeWidth,
-			barHeight * 0.33,
-			1,
-			1,
-			1,
-			1,
-			{ 0, 0, 0, 0.1 },
-			{ 0, 0, 0, 0.1 }
-		)
-		RectRound(
-			barArea[1] - addedSize,
-			barArea[2] - addedSize,
-			barArea[3] + addedSize,
-			barArea[4] + addedSize,
-			barHeight * 0.33,
-			1,
-			1,
-			1,
-			1,
-			{ 0.15, 0.15, 0.15, 0.17 },
-			{ 0.8, 0.8, 0.8, 0.13 }
-		)
-		-- -- gloss
-		RectRound(
-			barArea[1] - addedSize,
-			barArea[2] + addedSize,
-			barArea[3] + addedSize,
-			barArea[4] + addedSize,
-			barHeight * 0.33,
-			1,
-			1,
-			0,
-			0,
-			{ 1, 1, 1, 0 },
-			{ 1, 1, 1, 0.05 }
-		)
-		RectRound(
-			barArea[1] - addedSize,
-			barArea[2] - addedSize,
-			barArea[3] + addedSize,
-			barArea[2] + addedSize + (addedSize * 1.5),
-			barHeight * 0.2,
-			0,
-			0,
-			1,
-			1,
-			{ 1, 1, 1, 0.08 },
-			{ 1, 1, 1, 0.0 }
-		)
-		glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-	end)
-
-	dlist.resbar[res][2] = glCreateList(function()
-		-- Metalmaker Conversion slider
-		if res == "energy" then
-			mmLevel = Spring.GetTeamRulesParam(myTeamID, "mmLevel")
-			local convValue = mmLevel
-			if draggingConversionIndicatorValue then
-				convValue = draggingConversionIndicatorValue / 100
-			end
-			if convValue == nil then
-				convValue = 1
-			end
-
-			conversionIndicatorArea = {
-				mathFloor(barArea[1] + (convValue * barWidth) - (shareSliderWidth / 2)),
-				mathFloor(barArea[2] - sliderHeightAdd),
-				mathFloor(barArea[1] + (convValue * barWidth) + (shareSliderWidth / 2)),
-				mathFloor(barArea[4] + sliderHeightAdd),
-			}
-
-			UiSliderKnob(
-				mathFloor(conversionIndicatorArea[1] + ((conversionIndicatorArea[3] - conversionIndicatorArea[1]) / 2)),
-				mathFloor(conversionIndicatorArea[2] + ((conversionIndicatorArea[4] - conversionIndicatorArea[2]) / 2)),
-				mathFloor((conversionIndicatorArea[3] - conversionIndicatorArea[1]) / 2),
-				{ 0.95, 0.95, 0.7, 1 }
-			)
-		end
-
-		-- Share slider
-		if not isSingle then
-			if res == "energy" then
-				energyOverflowLevel = r[res][6]
-			else
-				metalOverflowLevel = r[res][6]
-			end
-
-			local value = r[res][6]
-
-			if draggingShareIndicator and draggingShareIndicatorValue[res] then
-				value = draggingShareIndicatorValue[res]
-			else
-				draggingShareIndicatorValue[res] = value
-			end
-
-			shareIndicatorArea[res] = {
-				mathFloor(barArea[1] + (value * barWidth) - (shareSliderWidth / 2)),
-				mathFloor(barArea[2] - sliderHeightAdd),
-				mathFloor(barArea[1] + (value * barWidth) + (shareSliderWidth / 2)),
-				mathFloor(barArea[4] + sliderHeightAdd),
-			}
-
-			UiSliderKnob(
-				mathFloor(shareIndicatorArea[res][1] + ((shareIndicatorArea[res][3] - shareIndicatorArea[res][1]) / 2)),
-				mathFloor(shareIndicatorArea[res][2] + ((shareIndicatorArea[res][4] - shareIndicatorArea[res][2]) / 2)),
-				mathFloor((shareIndicatorArea[res][3] - shareIndicatorArea[res][1]) / 2),
-				{ 0.85, 0, 0, 1 }
-			)
-		end
-	end)
+	-- ND: slider knobs (per frame): metal share, energy conversion + share; also sets their mouse areas.
+	-- Share knobs are drawn in single-player teams too. Hovered: 20 % larger.
+	dlist.resbar[res][2] = glCreateList(bpUi.drawKnobs, res, barArea, not showingQuitscreen() and resbarHover == res)
 
 	local resourceTranslations = {
 		metal = BAR.I18N("ui.topbar.resources.metal"),
@@ -1320,149 +867,15 @@ local function updateResbarValues(res, update)
 		if cappedCurRes > maxStorageRes * 1.07 then
 			cappedCurRes = maxStorageRes * 1.07
 		end
-		local barSize = barHeight * 0.2
-		local valueWidth = mathFloor(fillRatio(cappedCurRes, maxStorageRes) * barWidth)
-		if valueWidth < mathCeil(barSize) then
-			valueWidth = mathCeil(barSize)
-		end
+		local valueWidth = mathFloor(fillRatio(cappedCurRes, maxStorageRes) * barWidth) -- ND: no minimum width
 		if valueWidth ~= cache.lastValueWidth[res] then -- only recalc if the width changed
 			cache.lastValueWidth[res] = valueWidth
 
-			-- resbar
+			-- resbar (ND: a flat fill growing from the gauge end, no glow)
 			if dlist.resValuesBar[res] then
 				glDeleteList(dlist.resValuesBar[res])
 			end
-			dlist.resValuesBar[res] = glCreateList(function()
-				local glowSize = barHeight * 7
-				local color1, color2, glowAlpha
-
-				if res == "metal" then
-					color1 = { 0.51, 0.51, 0.5, 1 }
-					color2 = { 0.95, 0.95, 0.95, 1 }
-					glowAlpha = 0.025 + (0.05 * mathMin(1, fillRatio(cappedCurRes, r[res][2]) * 40))
-				else
-					color1 = { 0.5, 0.45, 0, 1 }
-					color2 = { 0.8, 0.75, 0, 1 }
-					glowAlpha = 0.035 + (0.07 * mathMin(1, fillRatio(cappedCurRes, r[res][2]) * 40))
-				end
-
-				RectRound(
-					resbarDrawinfo[res].barTexRect[1],
-					resbarDrawinfo[res].barTexRect[2],
-					resbarDrawinfo[res].barTexRect[1] + valueWidth,
-					resbarDrawinfo[res].barTexRect[4],
-					barSize,
-					1,
-					1,
-					1,
-					1,
-					color1,
-					color2
-				)
-				local borderSize = 1
-				RectRound(
-					resbarDrawinfo[res].barTexRect[1] + borderSize,
-					resbarDrawinfo[res].barTexRect[2] + borderSize,
-					resbarDrawinfo[res].barTexRect[1] + valueWidth - borderSize,
-					resbarDrawinfo[res].barTexRect[4] - borderSize,
-					barSize,
-					1,
-					1,
-					1,
-					1,
-					{ 0, 0, 0, 0.1 },
-					{ 0, 0, 0, 0.17 }
-				)
-
-				-- Bar value glow (recalculate glow rects dynamically based on current bar fill)
-				local barLeft = resbarDrawinfo[res].barArea[1]
-				local barTop = resbarDrawinfo[res].barArea[2]
-				local barBottom = resbarDrawinfo[res].barArea[4]
-				local currentGlowRight = barLeft + valueWidth
-
-				glBlending(GL.SRC_ALPHA, GL.ONE)
-				glColor(
-					resbarDrawinfo[res].barColor[1],
-					resbarDrawinfo[res].barColor[2],
-					resbarDrawinfo[res].barColor[3],
-					glowAlpha
-				)
-				glTexture(textures.barGlowCenter)
-				-- Middle glow follows the filled portion
-				DrawRect(barLeft, barTop - glowSize, currentGlowRight, barBottom + glowSize, 0.008)
-				glTexture(textures.barGlowEdge)
-				-- Left edge glow
-				DrawRect(barLeft - (glowSize * 2.5), barTop - glowSize, barLeft, barBottom + glowSize, 0.008)
-				-- Right edge glow follows the filled portion
-				DrawRect(
-					currentGlowRight + (glowSize * 3),
-					barTop - glowSize,
-					currentGlowRight,
-					barBottom + glowSize,
-					0.008
-				)
-				glTexture(false)
-
-				if res == "metal" then
-					glTexture(textures.noiseBackground)
-					glColor(1, 1, 1, 0.37)
-					TexturedRectRound(
-						resbarDrawinfo[res].barTexRect[1],
-						resbarDrawinfo[res].barTexRect[2],
-						resbarDrawinfo[res].barTexRect[1] + valueWidth,
-						resbarDrawinfo[res].barTexRect[4],
-						barSize,
-						1,
-						1,
-						1,
-						1,
-						barWidth * 0.33,
-						0
-					)
-					glTexture(false)
-				end
-
-				glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-			end)
-
-			-- energy glow effect: static geometry lists (texture offset baked at 0); the
-			-- slow texture scroll is applied per-frame via the texture matrix in
-			-- drawResBars, so the lists no longer get rebuilt at the 20Hz update rate
-			if res == "energy" then
-				local glow = dlist.energyGlow
-				if glow then
-					glDeleteList(glow[1])
-					glDeleteList(glow[2])
-					glDeleteList(glow[3])
-					glDeleteList(glow[4])
-				end
-				local gx1 = resbarDrawinfo[res].barTexRect[1]
-				local gy1 = resbarDrawinfo[res].barTexRect[2]
-				local gx2 = gx1 + valueWidth
-				local gy2 = resbarDrawinfo[res].barTexRect[4]
-				glow = {}
-				glow[1] = glCreateList(function()
-					glColor(1, 1, 1, 0.33)
-					glBlending(GL.SRC_ALPHA, GL.ONE)
-					glTexture(textures.energyGlow)
-					TexturedRectRound(gx1, gy1, gx2, gy2, barSize, 0, 0, 1, 1, barWidth / 0.5, 0)
-				end)
-				glow[2] = glCreateList(function()
-					TexturedRectRound(gx1, gy1, gx2, gy2, barSize, 0, 0, 1, 1, barWidth / 0.33, 0)
-				end)
-				glow[3] = glCreateList(function()
-					TexturedRectRound(gx1, gy1, gx2, gy2, barSize, 0, 0, 1, 1, barWidth / 0.45, 0)
-				end)
-				-- colorize a bit more (with added size)
-				local addedSize = mathFloor((barHeight * 0.15) + 0.5)
-				glow[4] = glCreateList(function()
-					glTexture(false)
-					glColor(1, 1, 0, 0.14)
-					RectRound(gx1 - addedSize, gy1 - addedSize, gx2 + addedSize, gy2 + addedSize, barHeight * 0.33)
-					glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-				end)
-				dlist.energyGlow = glow
-			end
+			dlist.resValuesBar[res] = glCreateList(bpUi.drawFill, res, valueWidth)
 		end
 	end
 end
@@ -1952,23 +1365,100 @@ end
 -- BP drawing
 --------------------------------------------------------------------------------
 
-bpUi.col = {
-	ringUsed = { 0, 0.85, 0.75, 1 }, -- used BP
-	ringLead = { 0.3, 1, 0.9, 1 }, -- leading part of the used arc
-	ringReserved = { 0, 0.42, 0.37, 1 }, -- reserved but not used
-	ringRest = { 0.22, 0.22, 0.22, 0.9 }, -- idle
-	metal = { 0.82, 0.82, 0.82, 1 },
-	metalStale = { 0.5, 0.5, 0.5, 0.55 },
-	energy = { 1, 0.88, 0.15, 1 },
-	energyStale = { 0.6, 0.56, 0.25, 0.55 },
-	wind = { 0.85, 0.75, 0, 0.9 },
-	pctRed = { 0.82, 0.39, 0.39 },
-	pctOrange = { 1, 0.6, 0.2 },
-	pctYellow = { 1, 1, 0.39 },
-	pctTeal = { 0, 0.85, 0.75 },
+-- ND: the look of the mockup (design/mockup_measurements.md), in units of the strip height H.
+-- x: distance from the gauge centre (metal side negative where noted by the name), y: down from the strip top.
+bpUi.D = {
+	metalL = 5.825, metalTan = 0.95, -- metal: top left corner, slope of the outer edge (43.5 deg from vertical)
+	energyR = 5.655, energyTan = 0.8875, -- energy: top right corner, 41.6 deg
+	gaugeW = 0.883, gaugeH = 1.203, chamfer = 0.152, -- gauge panel: half width, height, run of the bottom chamfers
+	smallX = 5.875, smallH = 0.64, smallTanL = 0.876, smallTanR = 0.871, stub = 0.07, -- wind / tidal / coms panel: left edge, slopes, cut corner
+	windW = 1.93, tidalW = 1.694, comsW = 1.694, -- segment widths
+	zoneH = 0.4375, zoneM = { 4.116, 3.806 }, zoneE = { 4.127, 3.833 }, -- darker bar zone: height, x of its slanted boundary (top, bottom)
+	shadowSide = 0.14, shadowDown = 0.094, gaugeShadowX = 0.039, gaugeShadowY = 0.11, -- hard drop shadows
+	barInM = 1.109, barInE = 1.094, barLen = 2.773, barTop = 0.211, barH = 0.148, -- tracks
+	barChamferX = 0.055, barChamferY = 0.07, barShadow = 0.0625,
+	knobW = 0.234, knobH = 0.3125,
+	lineTop = 0.298, lineBot = 0.673, -- centres of the two text lines
+	fsPI = 0.308, fsSt = 0.26, fsCur = 0.368, fsPct = 0.287, fsRange = 0.223, -- font sizes
+	piSignM = 4.711, piNumM = 4.539, piSignE = 4.07, piNumE = 4.682, piGap = 0.18, -- income / pull: sign centre, number edge
+	glyphM = 3.913, storTextM = 3.498, storTextE = 3.845, storGapE = 0.139, glyphW = 0.228, glyphH = 0.227, glyphY = 0.676,
+	curM = 1.5625, curE = 1.523, -- current value: metal right edge, energy left edge
+	plateX = 1.295, plateY = 0.68, plateS = 0.29, boltX = 1.269, boltY = 0.6875, boltS = 0.37, -- icons: centre, visible size
+	ringX = 0.011, ringY = 0.7206, rIn = 0.437, rOut = 0.583, sweep = 216, -- ring: centre offset, radii, start angle (tip)
+	ringShadowX = 0.023, ringShadowY = 0.0625,
+	windR = 0.70, windT = 0.031, -- wind range arc
+	markApex = 0.605, markBase = 0.72, markHalf = 7.5, -- energy support marker (radii, half angle in degrees)
+	pointR = { 0.369, 0.416, 0.32 }, pointA = { 17.8, -0.5, -14.6 }, -- metal support pointer: polar corners around its angle
+	pctX = 0.706, pctY = 1.119, iconX = 0.02, iconY = 0.648, iconS = 0.38, -- "50%" right edge and baseline, centre icon
+	windIconX = 0.258, windIconS = 0.244, windY = 0.3125, windTextX = 0.523, rangeGap = 0.115, rangeY = 0.307,
+	tidalIconX = 0.359, tidalIconY = 0.336, tidalIconW = 0.28, tidalIconH = 0.25, tidalTextX = 0.588,
+	comsIconX = 0.359, comsIconS = 0.4, comsTextX = 0.62,
+}
+bpUi.C = {
+	-- vertical gradients: { v (down from the top, in H), r, g, b, ... }
+	mLower = { 0.4375, 46, 50, 48, 0.7, 51, 56, 53, 0.98, 48, 53, 50 },
+	eLower = { 0.4375, 44, 48, 46, 0.7, 48, 53, 50, 0.98, 47, 52, 49 },
+	mIncome = { 0, 61, 68, 64, 0.4375, 57, 63, 60 },
+	eIncome = { 0, 55, 61, 58, 0.4375, 54, 60, 57 },
+	barZone = { 0, 37, 40, 38, 0.17, 40, 43, 41, 0.4375, 41, 44, 42 },
+	gauge = { 0, 42, 46, 44, 0.12, 44, 49, 46, 0.3, 48, 54, 51, 0.85, 49, 55, 52, 1.0, 47, 53, 50, 1.203, 43, 49, 47 },
+	small = { 0, 56, 62, 58, 0.2, 55, 61, 58, 0.36, 51, 57, 54, 0.48, 49, 55, 52, 0.64, 42, 47, 44 },
+	track = { 0, 58, 58, 58, 0.25, 62, 62, 62, 0.75, 88, 88, 88, 1, 91, 91, 91 }, -- v in track heights
+	outline = { 0.243, 0.243, 0.243, 1 },
+	outlineSmall = { 0.235, 0.235, 0.235, 1 },
+	outlineGR = { 0.212, 0.212, 0.212, 1 },
+	outlineGB = { 0.227, 0.227, 0.227, 1 },
+	topRow = { 0, 0, 0, 0.15 },
+	shadow = { 0, 0, 0, 0.23 },
+	shadowGauge = { 0, 0, 0, 0.28 },
+	shadowSmall = { 0, 0, 0, 0.25 },
+	shadowBar = { 0, 0, 0, 0.13 },
+	shadowRing = { 0, 0, 0, 0.21 },
+	divider = { 0, 0, 0, 0.16 },
+	clear = { 0, 0, 0, 0 },
+	gaugeEdge = { 0, 0, 0, 0.1 },
+	metalEdge = { 1, 1, 1, 0.032 },
+	metalFill = { 0.851, 0.851, 0.851, 1 },
+	energyFill = { 0.93, 0.84, 0.4, 1 },
+	-- knobs (mockup pixels): outline columns and rows, body gradient, left / right inner columns, the darker part right
+	-- of the glossy stripe, the stripe; { bottom, top } pairs are vertical gradients
+	knob = { left = { { 0.22, 0.22, 0.22, 1 }, { 0.1, 0.1, 0.1, 1 } }, right = { { 0.37, 0.37, 0.37, 1 }, { 0.26, 0.26, 0.26, 1 } },
+		top = { 0.13, 0.14, 0.14, 1 }, topIn = { 0.44, 0.44, 0.44, 1 }, bottom = { 0.57, 0.57, 0.57, 1 },
+		body = { { 0.94, 0.94, 0.94, 1 }, { 0.71, 0.71, 0.71, 1 } }, lin = { { 0.68, 0.68, 0.68, 1 }, { 0.53, 0.53, 0.53, 1 } },
+		rin = { { 0.65, 0.65, 0.65, 1 }, { 0.43, 0.43, 0.43, 1 } }, dark = { { 0.71, 0.71, 0.71, 1 }, { 0.8, 0.8, 0.8, 1 } },
+		shine = { { 0.97, 0.97, 0.97, 1 }, { 0.86, 0.86, 0.86, 1 } } },
+	knobRed = { left = { { 0.28, 0.16, 0.16, 1 }, { 0.18, 0.07, 0.07, 1 } }, right = { { 0.14, 0.07, 0.07, 1 }, { 0.13, 0.04, 0.04, 1 } },
+		top = { 0.13, 0.14, 0.14, 1 }, topIn = { 0.584, 0.043, 0.043, 1 }, bottom = { 0.61, 0.38, 0.38, 1 },
+		body = { { 0.98, 0.52, 0.52, 1 }, { 0.941, 0.098, 0.098, 1 } },
+		rin = { { 0.85, 0.27, 0.27, 1 }, { 0.74, 0.04, 0.04, 1 } }, dark = { { 0.89, 0.37, 0.37, 1 }, { 0.92, 0.3, 0.3, 1 } },
+		shine = { { 1, 0.66, 0.66, 1 }, { 0.97, 0.35, 0.35, 1 } } },
+	glyphM = { 0.8, 0.8, 0.8, 1 },
+	glyphE = { 0.91, 0.855, 0.675, 1 },
+	green = { 0.627, 0.925, 0.49, 1 },
+	red = { 1, 0.486, 0.486, 1 },
+	storM = { 0.737, 0.737, 0.737, 1 },
+	storE = { 0.851, 0.816, 0.694, 1 },
+	curM = { 0.757, 0.757, 0.757, 1 },
+	cream = { 0.906, 0.863, 0.71, 1 },
+	ringUsed = { 0.035, 1, 0.882, 1 },
+	ringReserved = { 0, 0.588, 0.518, 1 },
+	ringRest = { 0.353, 0.353, 0.353, 1 },
+	ringRestOut = { 0.25, 0.25, 0.25, 1 },
+	wind = { 0.651, 0.549, 0, 1 },
+	mark = { 1, 0.753, 0.278, 1 },
+	markHi = { 1, 0.914, 0.463, 1 },
+	markEdge = { 0.651, 0.502, 0.2, 1 },
+	point = { 0.5, 0.5, 0.5, 1 },
+	pointHi = { 0.984, 0.984, 0.984, 1 },
+	pointMid = { 0.6, 0.6, 0.6, 1 },
+	pointTip = { 0.72, 0.72, 0.72, 1 },
+	stale = { 0.55, 0.55, 0.55, 0.6 },
+	staleHi = { 0.7, 0.7, 0.7, 0.6 },
+	-- alert boxes (bpUi.drawAlerts)
 	outer = { 1, 1, 1, 0.15 },
 	outerInner = { 1, 1, 1, 0 },
 }
+bpUi.col = bpUi.C -- the alert boxes read bpUi.col.outer / outerInner
 -- alert boxes under the BP gauge, right to left in this order
 bpUi.alerts = {
 	{ text = "   Need metal   ", colors = { { 0.35, 0.1, 0.1, 1 }, { 0.25, 0.05, 0.05, 1 }, { 1, 0.3, 0.3, 0.25 }, { 1, 0.3, 0.3, 0.44 } } },
@@ -1981,29 +1471,211 @@ bpUi.alertOn = { false, false, false, false, false }
 bpUi.alertBits = { 1, 2, 4, 8, 16 }
 bpUi.alertMask = 0
 bpUi.pctStrings = {}
-bpUi.capH = 0.72 -- height of digits relative to the font size (font2, Exo 2 SemiBold): text boxes for the layout
-bpUi.sweep = 270 -- ring sweep in degrees, clockwise from 225 deg (lower left) over the top to -45 deg (lower right)
-bpUi.segments = 64 -- triangle strip segments for the full sweep
+bpUi.capH = 0.668 -- digit height relative to the font size (font2, Exo 2 SemiBold, at Spring's 0.95 px per size unit)
+bpUi.sweep = bpUi.D.sweep -- ring sweep in degrees, clockwise from 216 deg (lower left) over the top to 0 deg (3 o'clock)
 bpUi.rad = PI / 180
 bpUi.cos = math.cos
 bpUi.sin = mathSin
+bpUi.g = {} -- ND geometry in screen pixels, from bpUi.layout
 
--- from init: splits the stock metal + energy span into metal | BP | energy; returns the metal/energy width
-function bpUi.layout(width)
-	if not bp.cfg.enabled then
-		resbarArea.BP = {} -- every BP code path checks resbarArea.BP[1]
-		bpUi.clearLists()
-		return width
+-- ND drawing helpers. Shapes are convex polygons as flat arrays { x1, y1, x2, y2, ... } in GL coordinates,
+-- counter-clockwise. Called only while display lists are built (or render-to-texture), never per frame.
+-- They leave the blending alone: inside render-to-texture the helper's blend function (separate alpha) applies.
+
+-- the part of polygon p with a * x + b * y <= c
+function bpUi.clip(p, a, b, c)
+	local out, n = {}, #p
+	if n < 6 then
+		return out
 	end
-	local margin = widgetSpaceMargin
-	local span = 2 * width + margin -- stock metal..energy footprint, never changes
-	local bpW = mathFloor(2 * width * bp.cfg.widthFraction)
-	local meW = mathFloor((span - 2 * margin - bpW) / 2)
-	bpW = span - 2 * margin - 2 * meW -- rounding remainder goes to BP
-	local x = topbarArea[1] + meW + margin
-	resbarArea.BP = { x, topbarArea[2], x + bpW, topbarArea[4] }
-	updateResbar("BP")
-	return meW
+	local px, py = p[n - 1], p[n]
+	local pd = a * px + b * py - c
+	for i = 1, n, 2 do
+		local x, y = p[i], p[i + 1]
+		local d = a * x + b * y - c
+		if (d <= 0) ~= (pd <= 0) then
+			local t = pd / (pd - d)
+			out[#out + 1] = px + (x - px) * t
+			out[#out + 1] = py + (y - py) * t
+		end
+		if d <= 0 then
+			out[#out + 1] = x
+			out[#out + 1] = y
+		end
+		px, py, pd = x, y, d
+	end
+	return out
+end
+
+-- vertices of a fan; colour c1 at coordinate v1 to c2 at v2 (y, or x when horizontal), none when c1 is nil
+function bpUi.fanVerts(p, v1, v2, c1, c2, horizontal)
+	local vertex = gl.Vertex
+	local span = v2 - v1
+	for i = 1, #p, 2 do
+		local x, y = p[i], p[i + 1]
+		if c1 then
+			local t = 0
+			if span ~= 0 then
+				t = ((horizontal and x or y) - v1) / span
+				t = t < 0 and 0 or (t > 1 and 1 or t)
+			end
+			glColor(c1[1] + (c2[1] - c1[1]) * t, c1[2] + (c2[2] - c1[2]) * t, c1[3] + (c2[3] - c1[3]) * t,
+				c1[4] + (c2[4] - c1[4]) * t)
+		end
+		vertex(x, y)
+	end
+end
+
+-- fill polygon p: flat c1, or c1 at v1 to c2 at v2; no colour at all (shape for tints and blur) without c1
+function bpUi.fill(p, c1, c2, v1, v2, horizontal)
+	if #p >= 6 then
+		gl.BeginEnd(GL.TRIANGLE_FAN, bpUi.fanVerts, p, v1 or 0, v2 or 0, c1, c2 or c1, horizontal)
+	end
+end
+
+-- gradient stops { v, r, g, b, ... } (v down from top in units of `unit`) -> { y1, colour1, y2, colour2, ... }, y ascending
+function bpUi.stops(l, top, unit)
+	local s = {}
+	for i = #l - 3, 1, -4 do
+		s[#s + 1] = top - l[i] * unit
+		s[#s + 1] = { l[i + 1] / 255, l[i + 2] / 255, l[i + 3] / 255, 1 }
+	end
+	return s
+end
+
+-- fill polygon p with a vertical multi-stop gradient (stops from bpUi.stops); colours clamp beyond the ends
+function bpUi.grad(p, s)
+	local n = #s
+	if n == 2 then
+		return bpUi.fill(p, s[2])
+	end
+	for i = 1, n - 2, 2 do
+		local band = p
+		if i > 1 then
+			band = bpUi.clip(band, 0, -1, -s[i])
+		end
+		if i < n - 3 then
+			band = bpUi.clip(band, 0, 1, s[i + 2])
+		end
+		bpUi.fill(band, s[i + 1], s[i + 3], s[i], s[i + 2])
+	end
+end
+
+-- band of width w inside polygon p along its edge (x1, y1) -> (x2, y2) (counter-clockwise order)
+function bpUi.edge(p, x1, y1, x2, y2, w, col)
+	local dx, dy = x2 - x1, y2 - y1
+	local l = math.sqrt(dx * dx + dy * dy)
+	local nx, ny = -dy / l, dx / l
+	bpUi.fill(bpUi.clip(p, nx, ny, nx * x1 + ny * y1 + w), col)
+end
+
+-- polygon p moved by (dx, dy)
+function bpUi.move(p, dx, dy)
+	local q = {}
+	for i = 1, #p, 2 do
+		q[i], q[i + 1] = p[i] + dx, p[i + 1] + dy
+	end
+	return q
+end
+
+function bpUi.rect(x1, y1, x2, y2)
+	return { x1, y1, x2, y1, x2, y2, x1, y2 }
+end
+
+-- part of a disc between angles a0 and a1 (degrees): the round caps of the ring
+function bpUi.discVerts(x, y, r, n, a0, a1)
+	local vertex, cos, sin, rad = gl.Vertex, bpUi.cos, bpUi.sin, bpUi.rad
+	vertex(x, y)
+	for i = 0, n do
+		local a = (a0 + (a1 - a0) * i / n) * rad
+		vertex(x + r * cos(a), y + r * sin(a))
+	end
+end
+
+-- ring strip between angles a0 and a1 (degrees, 0 = right, counter-clockwise), radii r1 < r2, colours c1 (inner) / c2 (outer)
+function bpUi.arcVerts(cx, cy, a0, a1, r1, r2, c1, c2, n)
+	local vertex, cos, sin, rad = gl.Vertex, bpUi.cos, bpUi.sin, bpUi.rad
+	for i = 0, n do
+		local a = (a0 + (a1 - a0) * i / n) * rad
+		local ca, sa = cos(a), sin(a)
+		glColor(c2[1], c2[2], c2[3], c2[4])
+		vertex(cx + r2 * ca, cy + r2 * sa)
+		glColor(c1[1], c1[2], c1[3], c1[4])
+		vertex(cx + r1 * ca, cy + r1 * sa)
+	end
+end
+
+function bpUi.arc(cx, cy, a0, a1, r1, r2, c1, c2)
+	local n = mathMax(1, mathCeil(math.abs(a0 - a1) / 3))
+	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.arcVerts, cx, cy, a0, a1, r1, r2, c1, c2 or c1, n)
+end
+
+-- ring segment with round caps whose visible tips are at angles t0 > t1 (clockwise from t0 to t1), moved by (ox, oy).
+-- With cOut the outer half of the ring shades from col to cOut.
+function bpUi.ring(t0, t1, col, cOut, ox, oy)
+	local di = resbarDrawinfo.BP
+	local ri, ro, cap = di.rIn, di.rOut, di.capDeg
+	local cx, cy = di.cx + ox, di.cy + oy
+	local c0, c1 = t0 - cap, t1 + cap
+	if c1 > c0 then
+		c1 = c0
+	end
+	local rm, rc = (ri + ro) * 0.5, (ro - ri) * 0.5
+	if c0 - c1 > 0.01 then
+		if cOut then
+			bpUi.arc(cx, cy, c0, c1, ri, rm, col)
+			bpUi.arc(cx, cy, c0, c1, rm, ro, col, cOut)
+		else
+			bpUi.arc(cx, cy, c0, c1, ri, ro, col)
+		end
+	end
+	glColor(col[1], col[2], col[3], col[4])
+	local rad, cos, sin = bpUi.rad, bpUi.cos, bpUi.sin
+	-- half discs beyond the strip ends, so a translucent colour (the shadow) is not doubled where they meet
+	gl.BeginEnd(GL.TRIANGLE_FAN, bpUi.discVerts, cx + rm * cos(c0 * rad), cy + rm * sin(c0 * rad), rc, 12, c0, c0 + 180)
+	gl.BeginEnd(GL.TRIANGLE_FAN, bpUi.discVerts, cx + rm * cos(c1 * rad), cy + rm * sin(c1 * rad), rc, 12, c1 + 180, c1 + 360)
+end
+
+-- point at radius r and angle a (degrees) around the ring centre
+function bpUi.polar(r, a)
+	local di = resbarDrawinfo.BP
+	return di.cx + r * bpUi.cos(a * bpUi.rad), di.cy + r * bpUi.sin(a * bpUi.rad)
+end
+
+function bpUi.triVerts(x1, y1, x2, y2, x3, y3, c1, c2, c3)
+	local vertex = gl.Vertex
+	glColor(c1[1], c1[2], c1[3], c1[4])
+	vertex(x1, y1)
+	glColor(c2[1], c2[2], c2[3], c2[4])
+	vertex(x2, y2)
+	glColor(c3[1], c3[2], c3[3], c3[4])
+	vertex(x3, y3)
+end
+
+-- the storage glyph: three stacked discs in line art (top ellipse, two lower rims, the sides), left bottom at (x, y)
+function bpUi.ellVerts(cx, cy, rx, ry, lw, a0, a1, n)
+	local vertex, cos, sin, rad = gl.Vertex, bpUi.cos, bpUi.sin, bpUi.rad
+	for i = 0, n do
+		local a = (a0 + (a1 - a0) * i / n) * rad
+		local ca, sa = cos(a), sin(a)
+		vertex(cx + (rx + lw) * ca, cy + (ry + lw) * sa)
+		vertex(cx + (rx - lw) * ca, cy + (ry - lw) * sa)
+	end
+end
+
+function bpUi.glyph(x, y, w, h, col)
+	local lw = mathMax(0.6, h * 0.045) -- half the line width
+	local rx = w * 0.5 - lw
+	local ry = h * 0.17
+	local cx = x + w * 0.5
+	local top = y + h - lw - ry
+	local step = (top - (y + lw + ry)) * 0.5
+	glColor(col[1], col[2], col[3], col[4])
+	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.ellVerts, cx, top, rx, ry, lw, 0, 360, 24)
+	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.ellVerts, cx, top - step, rx, ry, lw, 180, 360, 12)
+	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.ellVerts, cx, top - 2 * step, rx, ry, lw, 180, 360, 12)
+	bpUi.fill(bpUi.rect(cx - rx - lw, top - 2 * step, cx - rx + lw, top))
+	bpUi.fill(bpUi.rect(cx + rx - lw, top - 2 * step, cx + rx + lw, top))
 end
 
 function bpUi.clearLists()
@@ -2034,111 +1706,446 @@ function bpUi.removeGuishader()
 	end
 end
 
--- ND: metal / energy layout, from updateResbar (returns barArea, which is recomputed on every call).
--- Metal: icon | income (upper row) / pull (lower row) column | upper row: fill bar,
---        lower row: storage glyph + storage, current value right aligned at the section's right edge.
--- Energy mirrors it: upper row: fill bar with the sliders | column right aligned at the outer edge,
---        lower row: energy glyph + current value, storage glyph + storage right aligned at the bar end.
--- With refreshUi it also sets the text positions, the tooltip rects and the render-to-texture clear rects:
--- the column rect spans both rows and touches nothing static; the current value and storage rects stay on
--- the lower row, below the static bar frame (barArea[2] - feather), and their flags are coupled in drawBars.
-function bpUi.resLayout(res, barHeight, skewSideInset)
-	local area, di, ws = resbarArea[res], resbarDrawinfo[res], widgetScale
-	local H = area[4] - area[2]
-	local isMetal = res == "metal"
-	local capH = bpUi.capH
-	local sCur, sPI, sSt = (height / 2.5) * ws, (height / 3) * ws, (height / 3.2) * ws -- stock text sizes
-	local gap = mathMax(2, mathFloor(4 * ws + 0.5))
-	local edgeWidth = mathMax(1, mathFloor(vsy / 1100))
-	local feather = mathFloor((barHeight * 0.15) + 0.5) * 5 + edgeWidth -- reach of the static bar frame around barArea
-	local colW = mathCeil(mathMax(font2:GetTextWidth("+9999"), font2:GetTextWidth("+999k")) * sPI * 1.05)
-	local base = area[2] + mathFloor(H * 0.13 + 0.5) -- baseline of the lower row
-	local lowerTop = base + capH * sCur + 2 -- top of the lower row texts, outline included
-	local y1 = mathCeil(lowerTop + feather) -- bottom of the bar: its frame starts above the lower row
-	local padO = mathFloor(14.5 * ws) -- stock padding at a vertical edge
-	local colX, barArea
-	if isMetal then
-		local iconPadding = mathFloor(H / 7) -- same icon geometry as the [1] list
-		colX = area[1] + mathFloor((bgpadding * 0.5) + 0.5) + iconPadding + skewSideInset
-			+ mathFloor(H - iconPadding - iconPadding) + gap
-		barArea = { colX + colW + 2 + feather, y1, area[3] - padO, y1 + barHeight }
+
+-- ND: from init. Places metal | gauge | energy after the mockup (sizes in units of the strip height H, metal starting at
+-- the stock left edge) and sets resbarArea.metal / .energy / .BP; returns the x where the wind / tidal / coms panel
+-- starts. When the design does not fit in front of the area the Top Bar Buttons widget reserves (a quarter of the
+-- width; narrow screens, large ui_scale), everything horizontal is compressed to fit.
+function bpUi.layout(width)
+	local D, g = bpUi.D, bpUi.g
+	local H = topbarArea[4] - topbarArea[2]
+	local totalWidth = topbarArea[3] - topbarArea[1]
+	local small = D.windW + (displayTidalSpeed and D.tidalW or 0) + (displayComCounter and D.comsW or 0)
+	local avail = totalWidth - mathFloor(totalWidth / 4) - 2 * widgetSpaceMargin
+	local k = mathMin(1, avail / ((D.metalL + D.smallX + small + D.shadowSide) * H))
+	local x0 = topbarArea[1]
+	local gc = x0 + D.metalL * H * k
+	g.H, g.T, g.B, g.k, g.hx, g.gc = H, topbarArea[4], topbarArea[2], k, H * k, gc
+	local on = bp.cfg.enabled
+	local hw = on and D.gaugeW * H * k or 0
+	g.gL, g.gR = mathFloor(gc - hw + 0.5), mathFloor(gc + hw + 0.5)
+	g.mL, g.eR = x0, mathFloor(gc + D.energyR * H * k + 0.5)
+	g.mTan, g.eTan = D.metalTan, D.energyTan
+	g.yBot = g.T - mathFloor(D.gaugeH * H + 0.5)
+	g.ch = on and mathFloor(D.chamfer * H + 0.5) or 0
+	resbarArea.metal = { g.mL, g.B, g.gL, g.T }
+	resbarArea.energy = { g.gR, g.B, g.eR, g.T }
+	bpUi.polys()
+	if on then
+		resbarArea.BP = { g.gL, g.B, g.gR, g.T }
+		updateResbar("BP")
 	else
-		colX = area[3] - padO - skewSideInset - colW
-		barArea = { area[1] + padO, y1, colX - 2 - feather, y1 + barHeight }
+		resbarArea.BP = {} -- every BP code path checks resbarArea.BP[1]
+		bpUi.clearLists()
+	end
+	if bpUi.belowList then
+		glDeleteList(bpUi.belowList)
+	end
+	bpUi.belowList = glCreateList(bpUi.drawBelow)
+	return mathFloor(gc + D.smallX * H * k + 0.5)
+end
+
+-- the outlines of metal, energy and the gauge, and their hard drop shadows
+function bpUi.polys()
+	local g, D = bpUi.g, bpUi.D
+	local T, B, H = g.T, g.B, g.H
+	local mBL, eBR = g.mL + g.mTan * H, g.eR - g.eTan * H
+	-- the inner edges reach 1 px under the gauge outline
+	g.pm = { mBL, B, g.gL + 1, B, g.gL + 1, T, g.mL, T }
+	g.pe = { g.gR - 1, B, eBR, B, g.eR, T, g.gR - 1, T }
+	local s, d = mathFloor(D.shadowSide * H + 0.5), mathFloor(D.shadowDown * H + 0.5)
+	g.shadowD = d
+	-- shadows: the outer edges moved out by s, the bottom down by d; energy's reaches under the right chamfer
+	g.sm = { mBL - s + g.mTan * d, B - d, g.gL, B - d, g.gL, T, g.mL - s, T }
+	g.se = { g.gR - g.ch, B - d, eBR + s - g.eTan * d, B - d, g.eR + s, T, g.gR - g.ch, T }
+	if g.gR > g.gL then
+		g.pg = { g.gL + g.ch, g.yBot, g.gR - g.ch, g.yBot, g.gR, B, g.gR, T, g.gL, T, g.gL, B }
+		g.sg = bpUi.move(g.pg, D.gaugeShadowX * H, -D.gaugeShadowY * H)
+	else
+		g.pg, g.sg = nil, nil
+	end
+end
+
+-- ND: from init, after windArea / tidalarea / comsArea: one panel holding the three as segments, x1 .. x2 at the top
+function bpUi.smallLayout(x1, x2, yb)
+	local g, D = bpUi.g, bpUi.D
+	if not g.H then
+		return
+	end
+	local T, H = g.T, g.H
+	local h = T - yb
+	local stub = mathFloor(D.stub * H + 0.5)
+	local tl, tr = D.smallTanL, D.smallTanR
+	local sx = x1 - tl * (h - stub) -- the slanted left edge ends in a short vertical cut at the bottom
+	g.ps = { sx, yb, x2 - tr * h, yb, x2, T, x1, T, sx, yb + stub }
+	local s, d = mathFloor(D.shadowSide * H + 0.5), mathFloor(D.shadowDown * H + 0.5)
+	g.ss = { sx, yb - d, x2 - tr * (h + d) + s, yb - d, x2 + s, T, x1, T, sx, yb }
+	g.psTanL, g.psTanR, g.psB, g.psX1, g.psX2, g.psStub = tl, tr, yb, x1, x2, stub
+end
+
+-- segment width of the wind / tidal / coms panel
+function bpUi.smallWidth(kind)
+	local D, g = bpUi.D, bpUi.g
+	local hx, H = g.hx, g.H
+	if kind == "wind" then
+		-- room for the highest wind speed, the range after it and a small margin
+		local need = D.windTextX * hx + (font2:GetTextWidth(maxWind .. ".0") * D.fsCur + font2:GetTextWidth(minWind .. "-" .. maxWind) * D.fsRange) * H
+			+ D.rangeGap * hx + 0.08 * H
+		return mathFloor(mathMax(D.windW * hx, need) + 0.5)
+	end
+	return mathFloor((kind == "tidal" and D.tidalW or D.comsW) * hx + 0.5)
+end
+
+-- metal or energy panel: lighter lower zone, a darker zone around the bar bounded by a slanted line, a lighter
+-- income zone outside it, a 1 px darker top row and a 1 px outline on the bottom and the outer edge
+function bpUi.drawRes(res)
+	local g, C, D = bpUi.g, bpUi.C, bpUi.D
+	local isMetal = res == "metal"
+	local p = isMetal and g.pm or g.pe
+	local T, B, H, gc, hx = g.T, g.B, g.H, g.gc, g.hx
+	local yz = T - mathFloor(D.zoneH * H + 0.5)
+	bpUi.grad(bpUi.clip(p, 0, 1, yz), bpUi.stops(isMetal and C.mLower or C.eLower, T, H))
+	local upper = bpUi.clip(p, 0, -1, -yz)
+	local z = isMetal and D.zoneM or D.zoneE
+	local sgn = isMetal and -1 or 1
+	local xt, xb = gc + sgn * z[1] * hx, gc + sgn * z[2] * hx
+	local kx = (xb - xt) / (T - yz) -- boundary: x = xt + kx * (T - y), i.e. x - kx * y = xt - kx * T
+	local cst = xt + kx * T
+	local left = bpUi.clip(upper, 1, kx, cst)
+	local right = bpUi.clip(upper, -1, -kx, -cst)
+	local zone = bpUi.stops(C.barZone, T, H)
+	bpUi.grad(isMetal and right or left, zone)
+	bpUi.grad(isMetal and left or right, bpUi.stops(isMetal and C.mIncome or C.eIncome, T, H))
+	bpUi.fill(bpUi.clip(p, 0, -1, -(T - 1)), C.topRow)
+	local w = isMetal and math.cos(math.atan(g.mTan)) or math.cos(math.atan(g.eTan)) -- 1 px wide in x
+	bpUi.edge(p, p[1], p[2], p[3], p[4], 1, C.outline)
+	if isMetal then
+		bpUi.edge(p, p[7], p[8], p[1], p[2], w, C.outline)
+	else
+		bpUi.edge(p, p[3], p[4], p[5], p[6], w, C.outline)
+	end
+end
+
+-- gauge panel (whole, or only its shape)
+function bpUi.drawGauge(shapeOnly)
+	local g, C = bpUi.g, bpUi.C
+	local p = g.pg
+	if not p then
+		return
+	end
+	if shapeOnly then
+		return bpUi.fill(p)
+	end
+	bpUi.grad(p, bpUi.stops(C.gauge, g.T, g.H))
+	local e = mathMax(2, mathFloor(g.H * 0.094 + 0.5)) -- darker inner band along the left side
+	bpUi.fill(bpUi.clip(p, 1, 0, g.gL + e), C.gaugeEdge, C.clear, g.gL, g.gL + e, true)
+	bpUi.fill(bpUi.clip(p, 0, -1, -(g.T - 1)), C.topRow)
+	local edge = bpUi.edge
+	edge(p, p[1], p[2], p[3], p[4], 1, C.outlineGB) -- bottom
+	edge(p, p[3], p[4], p[5], p[6], 1, C.outlineGB) -- right chamfer
+	edge(p, p[5], p[6], p[7], p[8], 1, C.outlineGR) -- right
+	edge(p, p[9], p[10], p[11], p[12], 1, C.outline) -- left
+	edge(p, p[11], p[12], p[1], p[2], 1, C.outlineGB) -- left chamfer
+end
+
+-- wind / tidal / coms panel with the dividers between the segments
+function bpUi.drawSmall()
+	local g, C = bpUi.g, bpUi.C
+	local p = g.ps
+	if not p then
+		return
+	end
+	local T = g.T
+	bpUi.grad(p, bpUi.stops(C.small, T, g.H))
+	bpUi.fill(bpUi.clip(p, 0, -1, -(T - 1)), C.topRow)
+	local wl, wr = math.cos(math.atan(g.psTanL)), math.cos(math.atan(g.psTanR))
+	bpUi.edge(p, p[1], p[2], p[3], p[4], 1, C.outlineSmall)
+	bpUi.edge(p, p[3], p[4], p[5], p[6], wr, C.outlineSmall)
+	bpUi.edge(p, p[7], p[8], p[9], p[10], wl, C.outlineSmall)
+	bpUi.edge(p, p[9], p[10], p[1], p[2], 1, C.outlineSmall)
+	local yb = g.psB + 2
+	if displayTidalSpeed and tidalarea[1] then
+		bpUi.fill(bpUi.rect(tidalarea[1] - 1, yb, tidalarea[1] + 1, T), C.clear, C.divider, yb, T)
+	end
+	if displayComCounter and comsArea[1] then
+		bpUi.fill(bpUi.rect(comsArea[1] - 1, yb, comsArea[1] + 1, T), C.clear, C.divider, yb, T)
+	end
+end
+
+-- uiBgTex (drawUiBackground): shadows first, then the panels; the gauge casts its shadow onto energy
+function bpUi.drawBackground()
+	local g, C = bpUi.g, bpUi.C
+	if not g.pm then
+		return
+	end
+	local small = cache.showIndicators and g.ps
+	if small then
+		bpUi.fill(g.ss, C.shadowSmall)
+	end
+	if showResourceBars then
+		bpUi.fill(g.sm, C.shadow)
+		bpUi.fill(g.se, C.shadow)
+		bpUi.drawRes("metal")
+		bpUi.drawRes("energy")
+		if g.pg then
+			bpUi.fill(g.sg, C.shadowGauge)
+			bpUi.fill(bpUi.rect(g.gL - 2, g.B, g.gL, g.T), C.metalEdge)
+			bpUi.drawGauge()
+		else
+			bpUi.fill(bpUi.rect(g.gL - 1, g.B, g.gL, g.T), C.outline) -- metal | energy without the gauge
+		end
+	end
+	if small then
+		bpUi.drawSmall()
+	end
+end
+
+-- per frame under a scissor (drawResBars): what lies below the strip, which uiBgTex cannot hold
+function bpUi.drawBelow()
+	local g, C = bpUi.g, bpUi.C
+	if not g.pm then
+		return
+	end
+	bpUi.fill(g.sm, C.shadow)
+	bpUi.fill(g.se, C.shadow)
+	if g.pg then
+		bpUi.fill(bpUi.clip(g.sg, 0, 1, g.B - g.shadowD), C.shadowGauge) -- below the strip's shadow band
+		bpUi.drawGauge()
+	end
+end
+
+-- ND: metal / energy content, from updateResbar (returns barArea, the track rect, recomputed on every call).
+-- Both mirror each other around the gauge: income over pull at the outer side, the bar on the upper row (metal
+-- fills from the gauge outward, right to left), storage and the current value with the resource icon on the
+-- lower row. With refreshUi it also sets the text positions, the static shapes, the tooltip rects and the
+-- render-to-texture clear rects: the column rect spans both rows and stays outside the track, the lower row rect
+-- stays below the track's shadow and next to the icon. drawBars couples the three text flags of a resource, so a
+-- clear never erases text without it being drawn again.
+function bpUi.resLayout(res)
+	local D, g = bpUi.D, bpUi.g
+	local di = resbarDrawinfo[res]
+	local H, T, gc, hx = g.H, g.T, g.gc, g.hx
+	local isMetal = res == "metal"
+	local ty = T - mathFloor(D.barTop * H + 0.5)
+	local by = ty - mathFloor(D.barH * H + 0.5)
+	local barArea
+	if isMetal then
+		barArea = { mathFloor(gc - (D.barInM + D.barLen) * hx + 0.5), by, mathFloor(gc - D.barInM * hx + 0.5), ty }
+	else
+		barArea = { mathFloor(gc + D.barInE * hx + 0.5), by, mathFloor(gc + (D.barInE + D.barLen) * hx + 0.5), ty }
 	end
 	if di.textCurrent and not refreshUi then
 		return barArea
 	end
-	local x0, ty = topbarArea[1], topbarArea[2]
-	local incBase = y1 + barHeight * 0.5 - capH * sPI * 0.5 -- income centred on the bar
-	local px, popt = colX, "o"
-	if not isMetal then
-		px, popt = colX + colW, "or"
-	end
-	-- the texts are printed without a vertical alignment option, so y is the baseline
-	di.textIncome = { "", px, incBase, sPI, popt }
-	di.textPull = { "", px, base, sPI, popt }
-	di.textExpense = { "", px, base, sPI, popt } -- not displayed in this layout
-	local g = { mathMax(3, mathFloor(sSt * 0.5 + 0.5)), mathFloor(capH * sSt + 0.5), mathMax(2, mathFloor(3 * ws + 0.5)),
-		mathCeil(font2:GetTextWidth("9999") * sSt * 1.05) } -- glyph width, height, gap to the number, reserved number width
-	di.storageGlyph = g
-	di.curReserve = mathCeil(font2:GetTextWidth("9999") * sCur * 1.05)
+	local x0, y0, capH = topbarArea[1], topbarArea[2], bpUi.capH
+	local x1, x2 = barArea[1], barArea[3]
+	-- track with a small chamfer at its outer bottom corner, and its shadow
+	local cx, cy = mathMax(1, D.barChamferX * H), mathMax(1, D.barChamferY * H)
 	if isMetal then
-		di.energyIcon = nil
-		di.textCurrent = { "", barArea[3], base, sCur, "or" }
-		di.textStorage = { "", barArea[1] + g[1] + g[3], base, sSt, "o" }
+		di.track = { x1 + cx, by, x2, by, x2, ty, x1, ty, x1, by + cy }
 	else
-		local iconS = mathFloor(capH * sCur * 1.2 + 0.5)
-		local iy = mathFloor(base + capH * sCur * 0.5 - iconS * 0.5 + 0.5)
-		di.energyIcon = { barArea[1], iy, barArea[1] + iconS, iy + iconS }
-		di.textCurrent = { "", barArea[1] + iconS + gap, base, sCur, "o" }
-		di.textStorage = { "", barArea[3], base, sSt, "or" }
+		di.track = { x1, by, x2 - cx, by, x2, by + cy, x2, ty, x1, ty }
 	end
-	di.lowerTop = lowerTop
-	di.clearPI = { mathFloor(colX - 2 - x0), 0, colW + 4, topbarArea[4] - ty }
-	di.clearCurrent = { 0, 0, 0, mathCeil(lowerTop - ty) }
-	di.clearStorage = { 0, 0, 0, mathCeil(lowerTop - ty) }
-	bpUi.setClear(res)
-	di.tipIncome = { colX, incBase - 2, colX + colW, incBase + capH * sPI + 2 }
-	di.tipPull = { colX, base - 2, colX + colW, base + capH * sPI + 2 }
-	local sc = di.clearStorage
-	di.tipStorage = { sc[1] + x0, base - 2, sc[1] + sc[3] + x0, base + capH * sSt + 2 }
+	di.trackShadow = bpUi.move(di.track, 0, -mathFloor(D.barShadow * H + 0.5))
+	di.trackStops = bpUi.stops(bpUi.C.track, ty, ty - by)
+	-- texts: sizes, baselines (digits centred on the line), anchors
+	local sPI, sSt, sCur = D.fsPI * H, D.fsSt * H, D.fsCur * H
+	di.fsPI, di.fsSt, di.fsCur = sPI, sSt, sCur
+	local lineTop, lineBot = T - D.lineTop * H, T - D.lineBot * H
+	di.baseTopPI, di.baseBotPI = lineTop - capH * sPI * 0.5, lineBot - capH * sPI * 0.5
+	di.baseSt, di.baseCur = lineBot - capH * sSt * 0.5, lineBot - capH * sCur * 0.5
+	local gw, gh = D.glyphW * H, D.glyphH * H
+	local glyphY = T - D.glyphY * H - gh * 0.5
+	local icon, iconS, iconVis
+	local m = mathMax(1, mathFloor(H * 0.03 + 0.5)) -- margin of the clear rects
+	local lowTop = mathFloor(T - (D.barTop + D.barH + D.barShadow) * H - m) -- below the track shadow
+	if isMetal then
+		di.piRight, di.piSignX, di.piNumX = false, gc - D.piSignM * hx, gc - D.piNumM * hx
+		local glyphX = gc - D.glyphM * hx
+		di.glyph = { glyphX, glyphY, gw, gh }
+		di.piMaxW = glyphX - m - di.piNumX
+		di.storX, di.storRight = gc - D.storTextM * hx, false
+		di.curX, di.curRight = gc - D.curM * hx, true
+		iconVis = D.plateS * H
+		iconS = iconVis / 0.606 -- metal.png: the plate covers 0.606 of the texture
+		icon = { gc - D.plateX * hx, T - D.plateY * H }
+		di.iconTex = ":lr" .. mathFloor(iconS * 2) .. "," .. mathFloor(iconS * 2) .. ":LuaUI/Images/metal.png"
+		di.clearPI = { 0, 0, mathFloor(glyphX - m) - x0, H }
+		local iconLeft = mathFloor(icon[1] - iconVis * 0.5 - 1)
+		di.clearCurrent = { mathFloor(glyphX - m) - x0, 0, iconLeft - mathFloor(glyphX - m), lowTop - y0 }
+	else
+		di.piRight, di.piSignX, di.piNumX = true, gc + D.piSignE * hx, gc + D.piNumE * hx
+		di.piMaxW = di.piNumX - (x2 + m) - D.piGap * hx
+		di.glyph = { 0, glyphY, gw, gh }
+		di.storX, di.storRight, di.storGap = gc + D.storTextE * hx, true, D.storGapE * hx
+		di.curX, di.curRight = gc + D.curE * hx, false
+		iconS = D.boltS * H
+		iconVis = iconS * 0.785 -- energy.png: the bolt covers 0.785 of the texture width
+		icon = { gc + D.boltX * hx, T - D.boltY * H }
+		di.iconTex = ":lr" .. mathFloor(iconS * 2) .. "," .. mathFloor(iconS * 2) .. ":LuaUI/Images/energy.png"
+		di.clearPI = { x2 + 1 - x0, 0, g.eR + 1 - x2, H }
+		local iconRight = mathCeil(icon[1] + iconVis * 0.5 + 1)
+		di.clearCurrent = { iconRight - x0, 0, x2 + 1 - iconRight, lowTop - y0 }
+	end
+	di.clearStorage = di.clearCurrent -- one rect for the lower row (the flags are coupled)
+	di.icon = { icon[1] - iconS * 0.5, icon[2] - iconS * 0.5, icon[1] + iconS * 0.5, icon[2] + iconS * 0.5 }
+	-- the stock text records (fields 2 to 5 are no longer read for drawing)
+	di.textCurrent = { "", di.curX, di.baseCur, sCur, di.curRight and "rs" or "s" }
+	di.textStorage = { "", di.storX, di.baseSt, sSt, di.storRight and "rs" or "s" }
+	di.textPull = { "", di.piNumX, di.baseBotPI, sPI, "s" }
+	di.textExpense = di.textPull
+	di.textIncome = { "", di.piNumX, di.baseTopPI, sPI, "s" }
+	-- tooltips
+	local c = di.clearPI
+	local cl, cr = c[1] + x0, c[1] + c[3] + x0
+	local sep = (lineTop + lineBot) * 0.5
+	di.tipIncome = { cl, sep, cr, T }
+	di.tipPull = { cl, g.B, cr, sep }
+	c = di.clearCurrent
+	di.tipStorage = isMetal and { c[1] + x0, g.B, (gc - D.storTextM * hx) + font2:GetTextWidth("9999") * sSt, lowTop }
+		or { gc + D.storTextE * hx - font2:GetTextWidth("9999") * sSt - gw - di.storGap, g.B, x2, lowTop }
 	return barArea
 end
 
--- ND: x extent of the current value and storage clear rects (uiTex coordinates): the reserved width or the
--- width of the text drawn last, whichever is larger, so a clear always covers the text that is there
-function bpUi.setClear(res)
-	local di = resbarDrawinfo[res]
-	local t, c = di.textCurrent, di.clearCurrent
-	if not c then
-		return
-	end
-	local x0 = topbarArea[1]
-	local w = mathMax(di.curReserve, cache.lastResbarValueWidth[res] or 0)
-	local left = t[5] == "or" and t[2] - w - 2 or t[2] - 1 -- 1 px on the left of the energy value: the energy glyph
-	c[1] = mathFloor(left - x0)
-	c[3] = mathCeil((t[5] == "or" and t[2] + 2 or t[2] + w + 2) - x0) - c[1]
-	local g = di.storageGlyph
-	t, c = di.textStorage, di.clearStorage
-	w = mathMax(g[4], cache.lastStorageWidth[res] or 0)
-	left = (t[5] == "or" and t[2] - w or t[2]) - g[3] - g[1] - 2
-	c[1] = mathFloor(left - x0)
-	c[3] = mathCeil((t[5] == "or" and t[2] + 2 or t[2] + w + 2) - x0) - c[1]
+-- static part of a resource in uiTex: icon, track and the track's shadow
+function bpUi.drawResStatic(res)
+	local di, C = resbarDrawinfo[res], bpUi.C
+	local ic = di.icon
+	glColor(1, 1, 1, 1)
+	glTexture(di.iconTex)
+	glTexRect(ic[1], ic[2], ic[3], ic[4])
+	glTexture(false)
+	bpUi.fill(di.trackShadow, C.shadowBar)
+	bpUi.grad(di.track, di.trackStops)
 end
 
--- builder icon: the radar icon of the faction's nano turret, else the BP fork's group icon
-function bpUi.iconTexture(texSize)
-	local startUnit = sp.GetTeamRulesParam(myTeamID, "startUnit")
-	local def = startUnit and UnitDefs[startUnit]
-	local name = (def and def.name and def.name:sub(1, 3) or "arm") .. "nanotc"
-	if not UnitDefNames[name] then
-		name = "armnanotc"
+-- value fill (per frame list): flat, from the inner (gauge) end outward, inside the track shape
+function bpUi.drawFill(res, w)
+	local di = resbarDrawinfo[res]
+	local t = di.track
+	if not t or w < 1 then
+		return
 	end
-	if UnitDefNames[name] and VFS.FileExists("Icons/" .. name .. ".png") then
-		return ":n:Icons/" .. name .. ".png"
+	local a = di.barArea
+	if res == "metal" then
+		bpUi.fill(bpUi.clip(t, -1, 0, -(a[3] - w)), bpUi.C.metalFill)
+	else
+		bpUi.fill(bpUi.clip(t, 1, 0, a[1] + w), bpUi.C.energyFill)
 	end
-	return ":lr" .. texSize .. "," .. texSize .. ":LuaUI/Images/groupicons/builder.png"
+end
+
+-- a square-cornered slider knob with a 1 px outline, a vertical gradient, a darker right part and a glossy stripe
+function bpUi.knob(cx, cy, w, h, red)
+	local k = red and bpUi.C.knobRed or bpUi.C.knob
+	local fill, rect = bpUi.fill, bpUi.rect
+	local x1 = mathFloor(cx - w * 0.5 + 0.5)
+	local y1 = mathFloor(cy - h * 0.5 + 0.5)
+	local x2, y2 = x1 + w, y1 + h
+	fill(rect(x1, y1, x1 + 1, y2), k.left[1], k.left[2], y1, y2)
+	fill(rect(x2 - 1, y1, x2, y2), k.right[1], k.right[2], y1, y2)
+	fill(rect(x1 + 1, y2 - 1, x2 - 1, y2), k.top)
+	fill(rect(x1 + 1, y1, x2 - 1, y1 + 1), k.bottom) -- the bottom row is half covered in the mockup
+	local ix1, iy1, ix2, iy2 = x1 + 1, y1 + 1, x2 - 1, y2 - 2
+	fill(rect(ix1, iy1, ix2, iy2), k.body[1], k.body[2], iy1, iy2)
+	if k.lin then
+		fill(rect(ix1, iy1, ix1 + 1, iy2), k.lin[1], k.lin[2], iy1, iy2)
+	end
+	local iw = ix2 - ix1
+	local sT, sB = ix1 + iw * 0.8, ix1 + iw * 0.56 -- the stripe runs from 80 % of the width at the top to 56 % at the bottom
+	local sw = mathMax(1, iw * 0.15)
+	fill({ sB, iy1, ix2, iy1, ix2, iy2, sT, iy2 }, k.dark[1], k.dark[2], iy1, iy2)
+	fill({ sB - sw, iy1, sB, iy1, sT, iy2, sT - sw, iy2 }, k.shine[1], k.shine[2], iy1, iy2)
+	fill(rect(ix2 - 1, iy1, ix2, iy2), k.rin[1], k.rin[2], iy1, iy2)
+	fill(rect(ix1, iy2, ix2, iy2 + 1), k.topIn)
+	return { x1, y1, x2, y2 }
+end
+
+-- slider knobs (per frame list [2]): energy has the conversion knob (white) and the share knob (red), metal the
+-- share knob (red, measured from the gauge end like its fill). Always drawn, also in single-player teams.
+function bpUi.drawKnobs(res, barArea, big)
+	local D, H = bpUi.D, bpUi.g.H
+	local mult = big and 1.2 or 1
+	local w = mathFloor(D.knobW * H * mult + 0.5)
+	local h = mathFloor(D.knobH * H * mult + 0.5)
+	local barW = barArea[3] - barArea[1]
+	local cy = (barArea[2] + barArea[4]) * 0.5
+	if res == "energy" then
+		mmLevel = sp.GetTeamRulesParam(myTeamID, "mmLevel")
+		local conv = mmLevel
+		if draggingConversionIndicatorValue then
+			conv = draggingConversionIndicatorValue / 100
+		end
+		if conv == nil then
+			conv = 1
+		end
+		conversionIndicatorArea = bpUi.knob(barArea[1] + conv * barW, cy, w, h, false)
+		energyOverflowLevel = r[res][6]
+	else
+		metalOverflowLevel = r[res][6]
+	end
+	local value = r[res][6]
+	if draggingShareIndicator and draggingShareIndicatorValue[res] then
+		value = draggingShareIndicatorValue[res]
+	else
+		draggingShareIndicatorValue[res] = value
+	end
+	local x = res == "metal" and barArea[3] - value * barW or barArea[1] + value * barW
+	shareIndicatorArea[res] = bpUi.knob(x, cy, w, h, true)
+end
+
+-- texts (render-to-texture into uiTex, from renderResbarText); shadow instead of an outline
+function bpUi.printSigned(di, sign, num, y, col)
+	local s = di.fsPI
+	local w = font2:GetTextWidth(num) * s
+	if w > di.piMaxW then -- shrink long numbers into the column
+		s = s * di.piMaxW / w
+		w = di.piMaxW
+	end
+	font2:SetTextColor(col[1], col[2], col[3], col[4])
+	if di.piRight then
+		font2:Print(num, di.piNumX, y, s, "rs")
+		font2:Print(sign, mathMin(di.piSignX, di.piNumX - w - bpUi.D.piGap * bpUi.g.hx), y, s, "cs")
+	else
+		font2:Print(sign, di.piSignX, y, s, "cs")
+		font2:Print(num, di.piNumX, y, s, "s")
+	end
+end
+
+function bpUi.drawPullIncome(res)
+	local di, C = resbarDrawinfo[res], bpUi.C
+	font2:Begin(true)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
+	bpUi.printSigned(di, "+", short(r[res][4]), di.baseTopPI, C.green)
+	bpUi.printSigned(di, "-", short(r[res][3]), di.baseBotPI, C.red)
+	font2:End()
+end
+
+function bpUi.drawStorage(res)
+	local di, C = resbarDrawinfo[res], bpUi.C
+	local text = cache.lastStorageText[res]
+	local s = di.fsSt
+	local w = font2:GetTextWidth(text) * s
+	cache.lastStorageWidth[res] = w
+	local gg = di.glyph
+	local isMetal = res == "metal"
+	local gx = isMetal and gg[1] or di.storX - w - di.storGap - gg[3]
+	bpUi.glyph(gx, gg[2], gg[3], gg[4], isMetal and C.glyphM or C.glyphE)
+	local col = isMetal and C.storM or C.storE
+	font2:Begin(true)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
+	font2:SetTextColor(col[1], col[2], col[3], col[4])
+	font2:Print(text, di.storX, di.baseSt, s, di.storRight and "rs" or "s")
+	font2:End()
+end
+
+function bpUi.drawValue(res, value)
+	local di = resbarDrawinfo[res]
+	local col = res == "metal" and bpUi.C.curM or bpUi.C.cream
+	font2:Begin(true)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
+	font2:SetTextColor(col[1], col[2], col[3], col[4])
+	font2:Print(value, di.curX, di.baseCur, di.fsCur, di.curRight and "rs" or "s")
+	font2:End()
 end
 
 -- gauge geometry, static lists, tint shape and the guishader list of the hanging part; via updateResbar("BP") from init
@@ -2147,54 +2154,25 @@ function bpUi.updateBar()
 	if not a[1] then
 		return
 	end
-	local di = resbarDrawinfo.BP
-	local ws = widgetScale
-	local H = a[4] - a[2]
-	local capH = bpUi.capH
-	local pad = mathMax(1, mathFloor(2 * ws + 0.5))
-	local gap = mathMax(1, mathFloor(ws + 0.5)) -- between the ring and the ticks / wind arc
-	local hang = mathFloor(H * 0.45 + 0.5)
-	local yBot = a[2] - hang
-	-- vertical budget, top to bottom: the ticks (up to R / 4 outside the ring when hovered and stalling),
-	-- the ring (outer radius R; its ends at 225 and -45 deg reach 0.707 R below the centre), the percent
-	-- text under the lower right end, the bottom of the hanging part. The text shrinks a bit before the
-	-- ring gets smaller than the bar height.
-	local textSize, R = H * 0.42, 0
-	for i = 0, 4 do
-		textSize = H * (0.42 - 0.02 * i)
-		R = ((a[4] - 1 - gap) - (yBot + pad + 1 + capH * textSize + 1 + pad)) / (1.25 + 0.7072)
-		if R * 2 >= H then
-			break
-		end
-	end
-	R = mathFloor(mathMin(R, ((a[3] - a[1]) * 0.5 - bgpadding - gap) / 1.25)) -- narrow section (width option)
-	local cy, hiBase, loBase
-	for _ = 1, 3 do -- rounding the tick space up can eat the text space: then one pixel less
-		cy = a[4] - 1 - gap - mathCeil(R * 0.25) - R
-		-- percent text: right aligned at the ring's right edge, between its lower right end and the hang bottom
-		hiBase = cy - R * 0.7072 - pad - 1 - capH * textSize
-		loBase = yBot + pad + 1
-		if hiBase >= loBase - 0.5 or R < 8 then
-			break
-		end
-		R = R - 1
-	end
-	local cx = mathFloor((a[1] + a[3]) * 0.5 + 0.5)
-	di.cx, di.cy, di.R, di.ringT, di.gap, di.yBot = cx, cy, R, R / 3, gap, yBot -- ring thickness: 1/6 of the diameter
-	di.tickLen, di.tickHalfW, di.windT = R / 6, R / 7, mathMax(1.5, R / 12)
-	di.textPct = { cx + R, mathFloor((hiBase + loBase) * 0.5 + 0.5), textSize, "or" } -- y is the baseline
-	-- builder icon in the centre (a square inside the inner circle)
-	local iconS = mathFloor((R - di.ringT) * 1.2)
-	local ix, iy = mathFloor(cx - iconS * 0.5 + 0.5), mathFloor(cy - iconS * 0.5 + 0.5)
+	local di, g, D = resbarDrawinfo.BP, bpUi.g, bpUi.D
+	local H, k, T = g.H, g.k, g.T
+	di.cx, di.cy = (g.gL + g.gR) * 0.5 + D.ringX * g.hx, T - D.ringY * H
+	di.rIn, di.rOut = D.rIn * H * k, D.rOut * H * k -- a compressed layout (k < 1) makes the ring smaller too
+	di.capDeg = (di.rOut - di.rIn) / (di.rOut + di.rIn) / bpUi.rad -- cap radius over the mid radius, in degrees
+	di.shadowX, di.shadowY = D.ringShadowX * H, -D.ringShadowY * H
+	di.windR1, di.windR2 = (D.windR - D.windT * 0.5) * H * k, (D.windR + D.windT * 0.5) * H * k
+	di.yBot = g.yBot
+	di.textPct = { di.cx - D.ringX * g.hx + D.pctX * g.hx, T - D.pctY * H, D.fsPct * H, "rs" } -- y is the baseline
+	local iconS = mathFloor(D.iconS * H * k + 0.5)
+	local ix, iy = mathFloor(di.cx + D.iconX * g.hx - iconS * 0.5 + 0.5), mathFloor(T - D.iconY * H - iconS * 0.5 + 0.5)
 	di.iconRect = { ix, iy, ix + iconS, iy + iconS }
 	di.iconShown = bp.cfg.icon and iconS >= 6
 	di.iconInTex = iy >= a[2] -- inside the bar: baked into uiTex, otherwise drawn per frame
-	di.iconTex = bpUi.iconTexture(mathFloor(iconS * 2))
-	bpUi.hang = hang
-	bpUi.hoverArea = { a[1], yBot, a[3], a[4] }
+	bpUi.hang = a[2] - g.yBot
+	bpUi.hoverArea = { a[1], g.yBot, a[3], a[4] }
 
 	local l = dlist.resbar.BP
-	for n = 1, 7 do -- 1: icon (uiTex), 3: icon (per frame), 4: tint shape, 5: percent text, 6: hanging background, 7: alerts
+	for n = 1, 7 do -- 1: icon (uiTex), 3: icon (per frame), 4: tint shape, 5: percent text, 7: alerts
 		if l[n] then
 			l[n] = glDeleteList(l[n])
 		end
@@ -2203,8 +2181,7 @@ function bpUi.updateBar()
 	if di.iconShown and not di.iconInTex then
 		l[3] = glCreateList(bpUi.drawIcon)
 	end
-	l[4] = glCreateList(bpUi.drawTint)
-	l[6] = glCreateList(bpUi.drawHang)
+	l[4] = glCreateList(bpUi.drawGauge, true)
 	bpUi.removeGuishader()
 	if WG.guishader then
 		bpUi.gsList = glCreateList(bpUi.drawHangShape)
@@ -2225,35 +2202,39 @@ function bpUi.drawFrame()
 	end
 end
 
+-- the centre icon: a hexagon nut in the used colour with three bars around it (vector, no texture)
 function bpUi.drawIcon()
-	local di = resbarDrawinfo.BP
+	local di, C = resbarDrawinfo.BP, bpUi.C
 	local ir = di.iconRect
-	glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-	glColor(1, 1, 1, 0.5)
-	glTexture(di.iconTex)
-	glTexRect(ir[1], ir[2], ir[3], ir[4])
-	glTexture(false)
+	local cx, cy, S = (ir[1] + ir[3]) * 0.5, (ir[2] + ir[4]) * 0.5, ir[3] - ir[1]
+	local rad, cos, sin = bpUi.rad, bpUi.cos, bpUi.sin
+	local ro, lw = S * 0.43, S * 0.11 -- hexagon circumradius, line width
+	local ri = ro - lw / 0.866
+	local col = C.ringUsed
+	for i = 0, 5 do -- pointy top: corners at 30 + 60 i degrees
+		local a1, a2 = (30 + 60 * i) * rad, (90 + 60 * i) * rad
+		bpUi.fill({ cx + ri * cos(a1), cy + ri * sin(a1), cx + ro * cos(a1), cy + ro * sin(a1), cx + ro * cos(a2), cy + ro * sin(a2),
+			cx + ri * cos(a2), cy + ri * sin(a2) }, col)
+	end
+	glColor(col[1], col[2], col[3], col[4])
+	gl.BeginEnd(GL.TRIANGLE_FAN, bpUi.discVerts, cx, cy, S * 0.15, 6, 30, 390) -- small hexagon in the middle
+	for i = 0, 2 do -- bars parallel to the left, upper right and lower right edges
+		local a = (180 - 120 * i) * rad
+		local d, l, t = S * 0.5, S * 0.17, lw * 0.5
+		local bx, by, ux, uy = cx + d * cos(a), cy + d * sin(a), -sin(a), cos(a)
+		local nx, ny = cos(a) * t, sin(a) * t
+		bpUi.fill({ bx - ux * l - nx, by - uy * l - ny, bx - ux * l + nx, by - uy * l + ny, bx + ux * l + nx, by + uy * l + ny,
+			bx + ux * l - nx, by + uy * l - ny }, col)
+	end
 	glColor(1, 1, 1, 1)
-end
-
--- the whole gauge element: in uiBgTex (drawUiBackground; the texture clips it at the bottom of the bar)
--- and per frame under a scissor for the part below the bar (drawBars)
-function bpUi.drawHang()
-	local a = resbarArea.BP
-	UiElement(a[1], resbarDrawinfo.BP.yBot, a[3], a[4], 0, 0, 1, 1)
 end
 
 -- guishader blur shape of the part below the bar
 function bpUi.drawHangShape()
-	local a = resbarArea.BP
-	RectRound(a[1], resbarDrawinfo.BP.yBot, a[3], a[2] + 1, WG.FlowUI.elementCorner or (5.5 * widgetScale), 0, 0, 1, 1)
-end
-
--- stall flash shape over the whole gauge (drawn additively with an explicit colour, like the stock overflow tint)
-function bpUi.drawTint()
-	local a, yBot = resbarArea.BP, resbarDrawinfo.BP.yBot
-	RectRound(a[1] + bgpadding, yBot + bgpadding, a[3] - bgpadding, a[4], bgpadding * 1.25, 0, 0, 1, 1)
-	RectRound(a[1], yBot, a[3], a[4], 5.5 * widgetScale, 0, 0, 1, 1)
+	local g = bpUi.g
+	if g.pg then
+		bpUi.fill(bpUi.clip(g.pg, 0, 1, g.B + 1))
+	end
 end
 
 -- smoothing of a displayed ratio towards its target, same factor as the stock smoothResources
@@ -2272,7 +2253,7 @@ function bpUi.percent(v)
 	return mathFloor(bpTrack.clamp01(v) * 100 + 0.5)
 end
 
--- position on the ring in whole degrees of the sweep (0 = start at 225 deg, 270 = end at -45 deg)
+-- position on the ring in whole degrees of the sweep (0 = start at 216 deg, 216 = end at 0 deg)
 function bpUi.deg(v)
 	return mathFloor(bpTrack.clamp01(v) * bpUi.sweep + 0.5)
 end
@@ -2281,7 +2262,7 @@ end
 -- percents, the marker angles (whole degrees) or a flag changed, the percent text only when its number changed
 function bpUi.refreshValues()
 	local di = resbarDrawinfo.BP
-	if not di.R then
+	if not di.rIn then
 		return
 	end
 	local L, s, cfgBP = bpUi.last, bpUi.s, bp.cfg
@@ -2290,7 +2271,7 @@ function bpUi.refreshValues()
 
 	s.used = bpUi.smooth(s.used, has and bp.usedRatio or 0)
 	s.reserved = bpUi.smooth(s.reserved, has and bp.reservedRatio or 0)
-	local usedP, resP = bpUi.percent(s.used), bpUi.percent(s.reserved)
+	local usedP, resP = deg(s.used), deg(s.reserved) -- whole degrees of the sweep
 	local mA, eA, wMinA, wMaxA = -1, -1, -1, -1
 	if cfgBP.indicators and has then
 		if bp.mSupportRatio then
@@ -2331,8 +2312,6 @@ function bpUi.refreshValues()
 			l[5] = glDeleteList(l[5])
 		end
 		if pct then
-			local c = bpUi.col
-			bpUi.pctColor = pct < 40 and c.pctRed or pct < 60 and c.pctOrange or pct < 80 and c.pctYellow or c.pctTeal
 			if not bpUi.pctStrings[pct] then
 				bpUi.pctStrings[pct] = pct .. "%"
 			end
@@ -2341,119 +2320,116 @@ function bpUi.refreshValues()
 	end
 end
 
--- the ring list (per frame): used / reserved / idle arcs, wind range arc, metal and energy ticks
+-- the ring list (per frame): shadow, idle track, reserved and used arcs (round caps, each over the previous one),
+-- the wind range arc and the energy support marker outside the ring, the metal support pointer inside it
 function bpUi.buildValueList()
-	local di, L, c = resbarDrawinfo.BP, bpUi.last, bpUi.col
-	local R, sweep = di.R, bpUi.sweep
-	local ri = R - di.ringT
-	local u, rs = L.usedP * sweep / 100, L.resP * sweep / 100
-	local lead = mathMin(u, sweep * 0.06)
-	glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-	bpUi.arc(0, u - lead, ri, R, c.ringUsed)
-	bpUi.arc(u - lead, u, ri, R, c.ringLead)
-	bpUi.arc(u, rs, ri, R, c.ringReserved) -- empty unless more is reserved than used
-	bpUi.arc(mathMax(u, rs), sweep, ri, R, c.ringRest)
-	if L.mA >= 0 or L.eA >= 0 then
-		local r0 = R + di.gap
-		-- wind range: energy support between min and max wind, a thin arc outside the ring
-		if L.wMinA >= 0 and L.wMaxA >= 0 then
-			local w1, w2 = mathMin(L.wMinA, L.wMaxA), mathMax(L.wMinA, L.wMaxA)
-			if w2 - w1 < 2 then
-				w1, w2 = w1 - 1, w2 + 1
-			end
-			bpUi.arc(w1, w2, r0, r0 + di.windT, c.wind)
+	local di, L, C, D = resbarDrawinfo.BP, bpUi.last, bpUi.C, bpUi.D
+	local a0 = bpUi.sweep
+	local ring = bpUi.ring
+	ring(a0, 0, C.shadowRing, nil, di.shadowX, di.shadowY)
+	ring(a0, 0, C.ringRest, C.ringRestOut, 0, 0)
+	if L.resP > 0 then
+		ring(a0, a0 - L.resP, C.ringReserved, nil, 0, 0)
+	end
+	if L.usedP > 0 then
+		ring(a0, a0 - L.usedP, C.ringUsed, nil, 0, 0)
+	end
+	local hoverMult = L.hover and 1.25 or 1
+	if L.wMinA >= 0 and L.wMaxA >= 0 then
+		local w1, w2 = a0 - mathMax(L.wMinA, L.wMaxA), a0 - mathMin(L.wMinA, L.wMaxA)
+		if w2 - w1 < 2 then
+			w1, w2 = w1 - 1, w2 + 1
 		end
-		local hoverMult = L.hover and 1.25 or 1
-		if L.mA >= 0 then
-			local mult = (L.stallM and 1.2 or 1) * hoverMult
-			bpUi.tick(L.mA, r0, di.tickLen * mult, di.tickHalfW * mult, L.stale and c.metalStale or c.metal)
+		local sx, sy = di.shadowX * 0.5, di.shadowY * 0.5
+		bpUi.arc(di.cx + sx, di.cy + sy, w2, w1, di.windR1, di.windR2, C.shadowRing)
+		bpUi.arc(di.cx, di.cy, w2, w1, di.windR1, di.windR2, L.stale and C.stale or C.wind)
+	end
+	local H = bpUi.g.H * bpUi.g.k
+	if L.eA >= 0 then -- triangle with its flat side outward, pointing in at the ring
+		local mult = (L.stallE and 1.2 or 1) * hoverMult
+		local a = a0 - L.eA
+		local rm = (D.markApex + D.markBase) * 0.5 * H
+		local half = (D.markBase - D.markApex) * 0.5 * H * mult
+		local ra, rb, ha = rm - half, rm + half, D.markHalf * mult
+		local e = 1 / (rb * bpUi.rad) -- one pixel in degrees at the base
+		local x1, y1 = bpUi.polar(ra - 1, a)
+		local x2, y2 = bpUi.polar(rb + 1, a - ha - e)
+		local x3, y3 = bpUi.polar(rb + 1, a + ha + e)
+		local edge = L.stale and C.stale or C.markEdge
+		gl.BeginEnd(GL.TRIANGLES, bpUi.triVerts, x1, y1, x2, y2, x3, y3, edge, edge, edge)
+		x1, y1 = bpUi.polar(ra, a)
+		x2, y2 = bpUi.polar(rb, a - ha)
+		x3, y3 = bpUi.polar(rb, a + ha)
+		local c1, c2 = C.mark, C.markHi
+		if L.stale then
+			c1, c2 = C.stale, C.staleHi
 		end
-		if L.eA >= 0 then
-			local mult = (L.stallE and 1.2 or 1) * hoverMult
-			bpUi.tick(L.eA, r0, di.tickLen * mult, di.tickHalfW * mult, L.stale and c.energyStale or c.energy)
+		gl.BeginEnd(GL.TRIANGLES, bpUi.triVerts, x1, y1, x2, y2, x3, y3, c1, c2, c2)
+	end
+	if L.mA >= 0 then -- small pointer inside the ring
+		local mult = (L.stallM and 1.2 or 1) * hoverMult
+		local a = a0 - L.mA
+		local pr, pa = D.pointR, D.pointA
+		local rc = (pr[1] + pr[2] + pr[3]) / 3 * H
+		local function corner(i) -- (not per frame: the list is rebuilt only on change)
+			local r = rc + (pr[i] * H - rc) * mult
+			return bpUi.polar(r, a + pa[i] * mult)
 		end
+		local x1, y1 = corner(1)
+		local x2, y2 = corner(2)
+		local x3, y3 = corner(3)
+		local xc, yc = (x1 + x2 + x3) / 3, (y1 + y2 + y3) / 3
+		local c1, c2, c3, ch = C.point, C.pointMid, C.pointTip, C.pointHi -- grey left corner, bright middle
+		if L.stale then
+			c1, c2, c3, ch = C.stale, C.stale, C.stale, C.staleHi
+		end
+		local tri = bpUi.triVerts
+		gl.BeginEnd(GL.TRIANGLES, tri, xc, yc, x1, y1, x2, y2, ch, c1, c2)
+		gl.BeginEnd(GL.TRIANGLES, tri, xc, yc, x2, y2, x3, y3, ch, c2, c3)
+		gl.BeginEnd(GL.TRIANGLES, tri, xc, yc, x3, y3, x1, y1, ch, c3, c1)
 	end
 	glColor(1, 1, 1, 1)
 end
 
--- arc of the ring between two sweep positions (degrees), radii r1 < r2, as one triangle strip
-function bpUi.arc(s0, s1, r1, r2, col)
-	if s0 < 0 then
-		s0 = 0
-	end
-	if s1 > bpUi.sweep then
-		s1 = bpUi.sweep
-	end
-	if s1 - s0 < 0.01 then
-		return
-	end
-	glColor(col[1], col[2], col[3], col[4])
-	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.arcVertices, s0, s1, r1, r2,
-		mathMax(1, mathCeil((s1 - s0) * bpUi.segments / bpUi.sweep - 0.001)))
-end
-
-function bpUi.arcVertices(s0, s1, r1, r2, n)
-	local di = resbarDrawinfo.BP
-	local cx, cy, rad, cos, sin, vertex = di.cx, di.cy, bpUi.rad, bpUi.cos, bpUi.sin, gl.Vertex
-	local step = (s1 - s0) / n
-	for i = 0, n do
-		local a = (225 - s0 - step * i) * rad
-		local ca, sa = cos(a), sin(a)
-		vertex(cx + r2 * ca, cy + r2 * sa)
-		vertex(cx + r1 * ca, cy + r1 * sa)
-	end
-end
-
--- marker tick outside the ring: a triangle pointing at the ring
-function bpUi.tick(s, r0, len, halfW, col)
-	glColor(col[1], col[2], col[3], col[4])
-	gl.BeginEnd(GL.TRIANGLE_STRIP, bpUi.tickVertices, s, r0, len, halfW)
-end
-
-function bpUi.tickVertices(s, r0, len, halfW)
-	local di = resbarDrawinfo.BP
-	local cx, cy, cos, sin, vertex = di.cx, di.cy, bpUi.cos, bpUi.sin, gl.Vertex
-	local a = (225 - s) * bpUi.rad
-	local r1 = r0 + len
-	local da = halfW / r1
-	vertex(cx + r0 * cos(a), cy + r0 * sin(a))
-	vertex(cx + r1 * cos(a - da), cy + r1 * sin(a - da))
-	vertex(cx + r1 * cos(a + da), cy + r1 * sin(a + da))
-end
-
--- percent text list (per frame; it lies under the bar, outside uiTex)
+-- percent text list (per frame; it lies partly under the bar, outside uiTex)
 function bpUi.drawPct()
-	local t, c = resbarDrawinfo.BP.textPct, bpUi.pctColor
+	local t, c = resbarDrawinfo.BP.textPct, bpUi.C.ringUsed
 	font2:Begin(true)
-	font2:SetOutlineColor(0, 0, 0, 1)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
 	font2:SetTextColor(c[1], c[2], c[3], 1)
 	font2:Print(bpUi.pctStrings[bpUi.pct], t[1], t[2], t[3], t[4])
 	font2:End()
 end
 
+-- what lies below the strip (shadows, the hanging part of the gauge), per frame from drawResBars under a scissor
+function bpUi.drawBelowStrip()
+	local g = bpUi.g
+	if bpUi.belowList and g.B then
+		gl.Scissor(0, 0, vsx, g.B)
+		glCallList(bpUi.belowList)
+		gl.Scissor(false)
+	end
+end
+
 -- every frame from drawResBars (behind showResourceBars)
 function bpUi.drawBars(update)
 	if update then
-		-- ND: on the lower row the clear rects of the current value and the storage can overlap (long numbers,
-		-- narrow sections), so whenever one of them is re-rendered the other one is too
+		-- ND: the clear rects of the income/pull column and of the lower row (storage + current value) touch each
+		-- other, so whenever one text of a resource is re-rendered all three are
 		for i = 1, 2 do
 			local u = updateRes[resourceNames[i]]
-			if u[1] or u[3] then
-				u[1], u[3] = true, true
+			if u[1] or u[2] or u[3] then
+				u[1], u[2], u[3] = true, true, true
 			end
 		end
 	end
 	local l = dlist.resbar.BP
-	if not resbarArea.BP[1] or not l[6] then
+	if not resbarArea.BP[1] then
 		return
 	end
 	if update then
 		bpUi.refreshValues()
 	end
-	local a, yBot = resbarArea.BP, resbarDrawinfo.BP.yBot
-	gl.Scissor(a[1] - 1, yBot - 1, a[3] - a[1] + 2, a[2] - yBot + 1) -- only below the bar: above it the element is in uiBgTex
-	glCallList(l[6])
-	gl.Scissor(false)
 	if (bp.stallingMetal or bp.stallingEnergy) and not spec and gameFrame > cfg.spawnWarpInFrame and l[4] then
 		glBlending(GL.SRC_ALPHA, GL.ONE)
 		if bp.stallingMetal then
@@ -2475,6 +2451,118 @@ function bpUi.drawBars(update)
 	end
 	if bpUi.alertsShown and l[7] then
 		glCallList(l[7])
+	end
+end
+
+-- ND: wind / tidal / coms segments: icon at the left, the value next to it, a small second value after it
+-- (wind: the min-max range, coms: the enemy count); all on the line 0.31 H below the top
+
+-- wind blades (per frame, rotating): wind1 moves to the shadow, wind2 draws it and moves to the icon, wind3 draws
+-- the icon; DrawScreen rotates before wind2 and wind3
+function bpUi.windLists(area)
+	local D, g = bpUi.D, bpUi.g
+	local cx, cy = area[1] + D.windIconX * g.hx, g.T - D.windY * g.H
+	local s = D.windIconS * g.H
+	local ox, oy = mathMax(1, g.H * 0.016), -mathMax(1, g.H * 0.023)
+	for i = 1, 3 do
+		if dlist["wind" .. i] then
+			glDeleteList(dlist["wind" .. i])
+		end
+	end
+	dlist.wind1 = glCreateList(function()
+		glPushMatrix()
+		glTranslate(cx + ox, cy + oy, 0)
+		glColor(0, 0, 0, 0.45)
+		glTexture(textures.blades)
+	end)
+	dlist.wind2 = glCreateList(function()
+		glTexRect(-s, -s, s, s)
+		glPopMatrix()
+		glPushMatrix()
+		glTranslate(cx, cy, 0)
+		glColor(1, 1, 1, 1)
+	end)
+	dlist.wind3 = glCreateList(function()
+		glTexRect(-s, -s, s, s)
+		glTexture(false)
+		glPopMatrix()
+	end)
+	cache.windRange = "\255\255\255\255" .. tostring(minWind) .. "-" .. tostring(maxWind)
+end
+
+-- current wind and the range (render-to-texture into uiTex, scissor = the wind segment)
+function bpUi.drawWindText()
+	local D, g = bpUi.D, bpUi.g
+	local H, capH = g.H, bpUi.capH
+	local x = windArea[1] + D.windTextX * g.hx
+	local s1, s2 = D.fsCur * H, D.fsRange * H
+	local w = font2:GetTextWidth("0.0") * s1
+	font2:Begin(true)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
+	if gameFrame > 0 then
+		font2:Print(currentWindText, x, g.T - D.windY * H - capH * s1 * 0.5, s1, "s")
+		w = font2:GetTextWidth(currentWind) * s1
+	end
+	font2:Print(cache.windRange, x + w + D.rangeGap * g.hx, g.T - D.rangeY * H - capH * s2 * 0.5, s2, "s")
+	font2:End()
+end
+
+-- tidal icon (per frame list, DrawScreen translates to the stock origin first): the waves, 1 px black outline
+function bpUi.tidalList(area)
+	local D, g = bpUi.D, bpUi.g
+	local ox = area[1] + ((area[3] - area[1]) / 2) - (cfg.useSkew and (area[4] - area[2]) * skewTan * 0.5 or 0)
+	local oy = area[2] + (bgpadding / 2) + ((area[4] - area[2]) / 2)
+	local cx, cy = area[1] + D.tidalIconX * g.hx - ox, g.T - D.tidalIconY * g.H - oy
+	local hw, hh = D.tidalIconW * g.H * 0.5, D.tidalIconH * g.H * 0.5
+	glTexture(textures.waves)
+	glColor(0, 0, 0, 1)
+	for i = 0, 7 do
+		local a = i * PI / 4
+		local dx, dy = bpUi.cos(a), mathSin(a)
+		glTexRect(cx - hw + dx, cy - hh + dy, cx + hw + dx, cy + hh + dy, 0, 0.71, 1, 0.29)
+	end
+	glColor(1, 1, 1, 1)
+	glTexRect(cx - hw, cy - hh, cx + hw, cy + hh, 0, 0.71, 1, 0.29)
+	glTexture(false)
+	glPopMatrix()
+end
+
+-- tidal speed (static, drawUi)
+function bpUi.drawTidalText()
+	local D, g = bpUi.D, bpUi.g
+	local s, c = D.fsCur * g.H, bpUi.C.cream
+	font2:Begin(true)
+	font2:SetOutlineColor(0, 0, 0, 0.6)
+	font2:SetTextColor(c[1], c[2], c[3], c[4])
+	font2:Print(tostring(tidalSpeed), tidalarea[1] + D.tidalTextX * g.hx, g.T - D.windY * g.H - bpUi.capH * s * 0.5, s, "s")
+	font2:End()
+end
+
+-- commander counter (list, render-to-texture into uiTex): icon in the colour set by renderComCounter, own count,
+-- enemy count small after it
+function bpUi.drawComs(area, texPath, showText)
+	local D, g = bpUi.D, bpUi.g
+	local H, capH = g.H, bpUi.capH
+	local s = D.comsIconS * H * 0.5
+	local cx, cy = area[1] + D.comsIconX * g.hx, g.T - D.windY * H
+	if VFS.FileExists(texPath) then
+		glTexture(textures.com)
+		glTexRect(cx - s, cy - s, cx + s, cy + s)
+		glTexture(false)
+	end
+	if showText then
+		local C = bpUi.C
+		local s1, s2 = D.fsCur * H, D.fsRange * H
+		local x = area[1] + D.comsTextX * g.hx
+		local own = tostring(allyComs)
+		font2:Begin(true)
+		font2:SetOutlineColor(0, 0, 0, 0.6)
+		font2:SetTextColor(C.green[1], C.green[2], C.green[3], 1)
+		font2:Print(own, x, cy - capH * s1 * 0.5, s1, "s")
+		font2:SetTextColor(C.red[1], C.red[2], C.red[3], 1)
+		font2:Print(tostring(enemyComCount), x + font2:GetTextWidth(own) * s1 + D.rangeGap * g.hx,
+			g.T - D.rangeY * H - capH * s2 * 0.5, s2, "s")
+		font2:End()
 	end
 end
 
@@ -2752,6 +2840,9 @@ end
 -- from Shutdown
 function bpUi.shutdown()
 	bpUi.clearLists()
+	if bpUi.belowList then
+		bpUi.belowList = glDeleteList(bpUi.belowList)
+	end
 	if WG.options and bpUi.optionIds then
 		if WG.options.removeOptions then
 			WG.options.removeOptions(bpUi.optionIds)
@@ -2779,31 +2870,22 @@ function init()
 	local filledWidth = 0
 	local totalWidth = topbarArea[3] - topbarArea[1]
 
-	-- metal
-	local width = mathFloor(totalWidth / 4.4)
-	local meW = bpUi.layout(width) -- BP: metal/energy width; places the BP section in the stock metal+energy span
-	resbarArea.metal =
-		{ topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
-	resbarArea.metal[3] = resbarArea.metal[1] + meW -- BP: metal keeps its left edge, BP follows
-	filledWidth = filledWidth + width + widgetSpaceMargin
-	updateResbar("metal")
+	skewTan = math.tan(math.rad(cfg.skewAngleDeg)) -- refresh in case cfg changed
 
-	--energy
-	resbarArea.energy =
-		{ topbarArea[1] + filledWidth, topbarArea[2], topbarArea[1] + filledWidth + width, topbarArea[4] }
-	resbarArea.energy[1] = resbarArea.energy[3] - meW -- BP: energy keeps its right edge
-	filledWidth = filledWidth + width + widgetSpaceMargin
+	-- metal, BP gauge, energy (ND: proportions of the mockup, in the stock metal + energy span at most)
+	local width = mathFloor(totalWidth / 4.4)
+	filledWidth = bpUi.layout(width) - topbarArea[1] -- sets resbarArea.metal / .BP / .energy
+	updateResbar("metal")
 	updateResbar("energy")
 
 	-- wind
-	width = mathFloor((height * 1.18) * widgetScale)
-	-- Small elements (wind, tidal, coms, buttons) — height fraction from cfg, top-aligned, when skew is on.
-	skewTan = math.tan(math.rad(cfg.skewAngleDeg)) -- refresh in case cfg changed
-	local smallVPad = cfg.useSkew and mathFloor((topbarArea[4] - topbarArea[2]) * (1 - cfg.smallElementHeightFraction))
-		or 0
+	-- Small elements (wind, tidal, coms, buttons) — height fraction from cfg, top-aligned.
+	-- ND: wind, tidal and coms are segments of one slanted panel (no gaps), always slanted
+	local smallVPad = mathFloor((topbarArea[4] - topbarArea[2]) * (1 - cfg.smallElementHeightFraction) + 0.5)
+	width = bpUi.smallWidth("wind")
 	windArea =
 		{ topbarArea[1] + filledWidth, topbarArea[2] + smallVPad, topbarArea[1] + filledWidth + width, topbarArea[4] }
-	filledWidth = filledWidth + width + widgetSpaceMargin
+	filledWidth = filledWidth + width
 	updateWind()
 
 	-- tidal
@@ -2811,29 +2893,32 @@ function init()
 		if not checkTidalRelevant() then
 			displayTidalSpeed = false
 		else
-			width = mathFloor((height * 1.18) * widgetScale)
+			width = bpUi.smallWidth("tidal")
 			tidalarea = {
 				topbarArea[1] + filledWidth,
 				topbarArea[2] + smallVPad,
 				topbarArea[1] + filledWidth + width,
 				topbarArea[4],
 			}
-			filledWidth = filledWidth + width + widgetSpaceMargin
+			filledWidth = filledWidth + width
 			updateTidal()
 		end
 	end
 
 	-- coms
 	if displayComCounter then
+		width = bpUi.smallWidth("coms")
 		comsArea = {
 			topbarArea[1] + filledWidth,
 			topbarArea[2] + smallVPad,
 			topbarArea[1] + filledWidth + width,
 			topbarArea[4],
 		}
-		filledWidth = filledWidth + width + widgetSpaceMargin
+		filledWidth = filledWidth + width
 		updateComs()
 	end
+	bpUi.smallLayout(windArea[1], topbarArea[1] + filledWidth, topbarArea[2] + smallVPad) -- ND: the joined panel
+	filledWidth = filledWidth + widgetSpaceMargin
 
 	-- the button strip is drawn by the Top Bar Buttons widget; this is the width it
 	-- reserves on the right, which GetFreeArea and GetPosition below report
@@ -3250,7 +3335,7 @@ function widget:Update(dt)
 
 		-- wind
 		currentWind = stringFormat("%.1f", select(4, sp.GetWind()))
-		currentWindText = "\255\255\255\255" .. currentWind
+		currentWindText = "\255\231\220\181" .. currentWind -- ND: cream
 
 		-- coms
 		if displayComCounter then
@@ -3299,6 +3384,7 @@ local function drawResBars()
 	if not showResourceBars then
 		return
 	end
+	bpUi.drawBelowStrip() -- ND: shadows and the hanging gauge below the strip (uiBgTex ends at the strip bottom)
 
 	-- (no matrix push/pop needed: nothing in here touches the modelview matrix)
 	local update = false
@@ -3447,130 +3533,9 @@ end
 
 
 local function drawUiBackground()
-	if showResourceBars then
-		if resbarArea.energy[1] then
-			local energySkew = cfg.useSkew and { brx = -((resbarArea.energy[4] - resbarArea.energy[2]) * skewTan) }
-				or nil
-			UiElement(
-				resbarArea.energy[1],
-				resbarArea.energy[2],
-				resbarArea.energy[3],
-				resbarArea.energy[4],
-				0,
-				0,
-				1,
-				1,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				energySkew
-			)
-		end
-		if resbarArea.BP[1] then -- BP: plain rectangle down to the bottom of the gauge; the texture clips it at the bar bottom
-			bpUi.drawHang()
-		end
-		if resbarArea.metal[1] then
-			local metalSkew = cfg.useSkew and { blx = (resbarArea.metal[4] - resbarArea.metal[2]) * skewTan } or nil
-			UiElement(
-				resbarArea.metal[1],
-				resbarArea.metal[2],
-				resbarArea.metal[3],
-				resbarArea.metal[4],
-				0,
-				0,
-				1,
-				1,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-				metalSkew
-			)
-		end
-	end
-	if cache.showIndicators and comsArea[1] then
-		local H = comsArea[4] - comsArea[2]
-		local smallSkew = cfg.useSkew and { blx = -(H * skewTan), brx = -(H * skewTan) } or nil
-		UiElement(
-			comsArea[1],
-			comsArea[2],
-			comsArea[3],
-			comsArea[4],
-			0,
-			0,
-			1,
-			1,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			smallSkew
-		)
-	end
-	if cache.showIndicators and windArea[1] then
-		local H = windArea[4] - windArea[2]
-		local smallSkew = cfg.useSkew and { blx = -(H * skewTan), brx = -(H * skewTan) } or nil
-		UiElement(
-			windArea[1],
-			windArea[2],
-			windArea[3],
-			windArea[4],
-			0,
-			0,
-			1,
-			1,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			smallSkew
-		)
-	end
-	if cache.showIndicators and displayTidalSpeed and tidalarea[1] then
-		local H = tidalarea[4] - tidalarea[2]
-		local smallSkew = cfg.useSkew and { blx = -(H * skewTan), brx = -(H * skewTan) } or nil
-		UiElement(
-			tidalarea[1],
-			tidalarea[2],
-			tidalarea[3],
-			tidalarea[4],
-			0,
-			0,
-			1,
-			1,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			smallSkew
-		)
-	end
+	-- ND: metal, gauge, energy and the wind / tidal / coms panel are drawn after the mockup (opaque, sharp
+	-- corners, hard shadows) instead of with FlowUI's element, see bpUi.drawBackground
+	bpUi.drawBackground()
 end
 
 local function drawUi()
@@ -3585,40 +3550,29 @@ local function drawUi()
 	-- min and max wind (rendered per-frame via renderWindText; nowind fallback below)
 	local windH = windArea[4] - windArea[2]
 	local fontsize = windH / 3.2
-	local windSkewCX = windArea[1] + ((windArea[3] - windArea[1]) / 2) - (cfg.useSkew and windH * skewTan * 0.5 or 0)
+	local windSkewCX = windArea[1] + ((windArea[3] - windArea[1]) * 0.6) -- ND: right of the blades
 	if cache.showIndicators and noWind then
 		font2:Begin(true)
-		--font2:Print("\255\200\200\200no wind", windSkewCX, windArea[2] + ((windArea[4] - windArea[2]) / 2.05) - (fontsize / 5), fontsize, 'oc') -- Wind speed text
 		font2:Print(
 			noWindText1,
 			windSkewCX,
 			windArea[2] + ((windArea[4] - windArea[2]) / 1.5) - (fontsize / 5),
 			fontsize * 1.06,
-			"oc"
+			"cs"
 		) -- Wind speed text
 		font2:Print(
 			noWindText2,
 			windSkewCX,
 			windArea[2] + ((windArea[4] - windArea[2]) / 2.8) - (fontsize / 5),
 			fontsize * 1.06,
-			"oc"
+			"cs"
 		) -- Wind speed text
 		font2:End()
 	end
 
 	-- tidal speed
 	if cache.showIndicators and displayTidalSpeed then
-		local fontSize = (tidalarea[4] - tidalarea[2]) / 2.3
-		local skewCenterOffset = cfg.useSkew and (tidalarea[4] - tidalarea[2]) * skewTan * 0.5 or 0
-		font2:Begin(true)
-		font2:Print(
-			tidalSpeedText,
-			tidalarea[1] + ((tidalarea[3] - tidalarea[1]) / 2) - skewCenterOffset,
-			tidalarea[2] + ((tidalarea[4] - tidalarea[2]) / 2.05) - (fontSize / 5),
-			fontSize,
-			"oc"
-		) -- Tidal speed text
-		font2:End()
+		bpUi.drawTidalText() -- ND
 	end
 end
 
@@ -3647,30 +3601,7 @@ local function renderWindText()
 	glScale(2 / (topbarArea[3] - topbarArea[1]), 2 / (topbarArea[4] - topbarArea[2]), 0)
 	glTranslate(-topbarArea[1], -topbarArea[2], 0)
 
-	local windH = windArea[4] - windArea[2]
-	local fontSize = windH / 2.3
-	local skewCenterOffset = cfg.useSkew and windH * skewTan * 0.5 or 0
-	font2:Begin(true)
-	font2:SetOutlineColor(0, 0, 0, 1)
-	-- current wind (large, centered) - only once game has started
-	if gameFrame > 0 then
-		font2:Print(
-			currentWindText,
-			windArea[1] + ((windArea[3] - windArea[1]) / 2.1) - skewCenterOffset,
-			windArea[2] + (windH / 1.85) - (fontSize / 5),
-			fontSize,
-			"oc"
-		)
-	end
-	-- min wind: top area, x corrected for slope at text height
-	local smallFS = windH / 3.4
-	local minBaseline = windArea[4] - smallFS + (1 * widgetScale)
-	local minWindX = windArea[3] - (cfg.useSkew and skewTan * (windArea[4] - minBaseline) or 0) - (4.5 * widgetScale)
-	font2:Print(minWindText, minWindX, minBaseline, smallFS, "or")
-	-- max wind: bottom-right corner
-	local brWindX = windArea[3] - (cfg.useSkew and windH * skewTan or 0)
-	font2:Print(maxWindText, brWindX - (1.2 * widgetScale), windArea[2] + (4.5 * widgetScale), smallFS, "or")
-	font2:End()
+	bpUi.drawWindText() -- ND: current wind and the min-max range in a row
 end
 
 local function renderComCounter()
@@ -3679,9 +3610,9 @@ local function renderComCounter()
 	glTranslate(-topbarArea[1], -topbarArea[2], 0)
 
 	if allyComs == 1 and (gameFrame % 12 < 6) then
-		glColor(1, 0.6, 0, 0.45)
+		glColor(1, 0.6, 0, 1)
 	else
-		glColor(1, 1, 1, 0.22)
+		glColor(1, 1, 1, 1) -- ND: a plain white icon like the wind and tidal icons
 	end
 	glCallList(dlist.coms)
 end
@@ -3773,7 +3704,9 @@ function widget:DrawScreen()
 		glPushMatrix()
 		glCallList(dlist.wind1)
 		glRotate(windRotation, 0, 0, 1)
-		glCallList(dlist.wind2)
+		glCallList(dlist.wind2) -- ND: the shadow, then the blades over it
+		glRotate(windRotation, 0, 0, 1)
+		glCallList(dlist.wind3)
 		glPopMatrix()
 	end
 
@@ -3881,6 +3814,9 @@ local function adjustSliders(x, y)
 	if draggingShareIndicator and not spec then
 		local shareValue = (x - resbarDrawinfo[draggingShareIndicator].barArea[1])
 			/ (resbarDrawinfo[draggingShareIndicator].barArea[3] - resbarDrawinfo[draggingShareIndicator].barArea[1])
+		if draggingShareIndicator == "metal" then
+			shareValue = 1 - shareValue -- ND: the metal bar runs from the gauge (right) to the left
+		end
 		if shareValue < 0 then
 			shareValue = 0
 		end
@@ -3920,7 +3856,7 @@ end
 function widget:MousePress(x, y, button)
 	if button == 1 then
 		if not spec then
-			if not isSingle then
+			do -- ND: the share knobs are shown (and work) in single-player teams too
 				if
 					mathIsInRect(
 						x,
@@ -4159,6 +4095,7 @@ function widget:Shutdown()
 	if dlist.blendBg then
 		dlist.wind1 = glDeleteList(dlist.wind1)
 		dlist.wind2 = glDeleteList(dlist.wind2)
+		dlist.wind3 = glDeleteList(dlist.wind3)
 		dlist.tidal2 = glDeleteList(dlist.tidal2)
 		dlist.coms = glDeleteList(dlist.coms)
 		dlist.blendBg = glDeleteList(dlist.blendBg)

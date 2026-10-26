@@ -5,6 +5,8 @@ Usage:
   python3 -I tools/render_widget.py <widget.lua> [--out file.png] [--vsx 1920 --vsy 1080] [--ui-scale 1]
          [--legacy] [--frames 200] [--compare mockup.png] [--crop auto|full|x1,y1,x2,y2] [--scale N]
          [--ss 2] [--bg R,G,B|transparent] [--font-scale 0.95] [--no-coms] [--no-tidal]
+         [--calm] [--bp-used F] [--bp-reserved F] [--bp-msupport F] [--bp-esupport F]
+         [--bp-wind-min F --bp-wind-max F] [--mm-level F] [--share-metal F] [--share-energy F]
 
 Runs the widget lifecycle like run_widget.py (mock_env.lua) with the REAL stock FlowUI
 (stock_reference/gui_flowui.lua) and a recording gl layer (mock_gl_record.lua), then draws the last
@@ -31,10 +33,12 @@ FONT_FILES = {
     "exo2": os.path.join(ASSETS, "fonts", "Exo2-SemiBold.otf"),
     "mono": os.path.join(ASSETS, "fonts", "Poppins-Regular.otf"),
 }
-# defaults for the bundled mockup (tools/assets/mockup_new_design.png): height of its top bar and the
-# x of the metal element's left (top) edge, in mockup pixels
-MOCKUP_BAR_H = 67
-MOCKUP_METAL_X = 100
+# defaults for the bundled mockup (tools/assets/mockup_new_design.png), measured in
+# design/mockup_measurements.md: height of its top bar (H), the x of the metal element's left (top) edge
+# and the rows above the bar (a flat band, the screen edge), in mockup pixels
+MOCKUP_BAR_H = 64
+MOCKUP_METAL_X = 103.7
+MOCKUP_TOP = 4
 
 # ------------------------------------------------------------------------------------------- assets
 _asset_index = None
@@ -525,7 +529,7 @@ class Renderer:
 
 # ------------------------------------------------------------------------------------------- driver
 DRIVER = r"""
-function(w, frames, vsx, vsy)
+function(w, frames, vsx, vsy, opts)
   local results = {}
   local function step(name, fn)
     local ok, err = xpcall(fn, debug.traceback)
@@ -550,6 +554,27 @@ function(w, frames, vsx, vsy)
   U.units[lab].cmds = { { id = -6 }, { id = -6 } }
   local enemyCom = U.addUnit(8, 1, 1)
   if not step("Initialize", function() w:Initialize() end) then return results end
+  -- scenario overrides for the shot (buildpower forks only): --calm clears the alert flags and turns the
+  -- alerts off, --bp-* force the gauge ratios; applied after every GameFrame / Update of the last 60 frames
+  -- so the smoothed values on the gauge have converged when the screen is recorded
+  local function scenario()
+    local B = WG.buildpower and WG.buildpower.GetData and WG.buildpower.GetData()
+    if type(B) ~= "table" then return end
+    if opts.calm then
+      B.stallingMetal, B.stallingEnergy, B.idleAlert, B.needBuildpower, B.tooMuchBuildpower = false, false, false, false, false
+      if B.cfg then B.cfg.alerts = false end
+    end
+    local any = false
+    for k, v in pairs({ usedRatio = opts.used, reservedRatio = opts.reserved, mSupportRatio = opts.msupport,
+        eSupportRatio = opts.esupport, eSupportMinWind = opts.windMin, eSupportMaxWind = opts.windMax }) do
+      B[k] = v
+      any = true
+    end
+    if any then
+      B.hasData, B.supportStale = true, false
+      if (opts.windMin or opts.windMax) and (B.numWindGenerators or 0) < 1 then B.numWindGenerators = 1 end
+    end
+  end
   if w.SetConfigData then step("SetConfigData", function() w:SetConfigData(nil) end) end
   if w.ViewResize then step("ViewResize", function() w:ViewResize(vsx, vsy) end) end
   if w.UnitCreated then step("UnitCreated", function() w:UnitCreated(enemyCom, 8, 1) w:UnitCreated(com, 1, 0) end) end
@@ -563,16 +588,24 @@ function(w, frames, vsx, vsy)
       HARNESS.frame = f
       HARNESS.clock = HARNESS.clock + 1 / 30
       if w.GameFrame then w:GameFrame(f) end
+      if f > frames - 60 then scenario() end
       w:Update(1 / 30)
+      if f > frames - 60 then scenario() end
       draw()
     end
   end)
   -- final frame: record the screen
   step("final DrawScreen", function()
-    HARNESS.frame = frames + 1
+    -- --calm: the shot is taken at the warp-in frame, so the effects gated on "gameFrame > spawnWarpInFrame"
+    -- (the stock overflow / low-storage flashes, the buildpower stall tint) stay off
+    local ff = frames + 1
+    if opts.calm then ff = math.min(ff, Game.spawnWarpInFrame or 90) end
+    HARNESS.frame = ff
     HARNESS.clock = HARNESS.clock + 1 / 30
-    if w.GameFrame then w:GameFrame(frames + 1) end
+    if w.GameFrame then w:GameFrame(ff) end
+    scenario()
     w:Update(1 / 30)
+    scenario()
     rec.screenOn = true
     rec.screen.ops = {}
     draw()
@@ -584,7 +617,7 @@ end
 """
 
 SETUP = r"""
-local vsx, vsy, uiScale, coms, tidal, wind = ...
+local vsx, vsy, uiScale, coms, tidal, wind, mmLevel, shareMetal, shareEnergy = ...
 HARNESS.clock = 100
 os.clock = function() return HARNESS.clock end
 Spring.GetViewGeometry = function() return vsx, vsy, 0, 0 end
@@ -594,6 +627,9 @@ local getF = Spring.GetConfigFloat
 Spring.GetConfigFloat = function(k, d) if k == "ui_scale" then return uiScale end return getF(k, d) end
 Spring.IsGUIHidden = function() return false end
 HARNESS.wind = wind
+if mmLevel then HARNESS.rules.mmLevel = mmLevel end
+if shareMetal then HARNESS.res.metal[6] = shareMetal end
+if shareEnergy then HARNESS.res.energy[6] = shareEnergy end
 HARNESS.mx, HARNESS.my = math.floor(vsx / 2), math.floor(vsy / 2)
 if tidal then
   Spring.GetTidal = function() return 20 end
@@ -651,7 +687,8 @@ def run_widget(args, fonts):
     g.PY_FILE_EXISTS = py_file_exists
     rt.execute(lua_text(os.path.join(TOOLS, "mock_env.lua")))
     g.HARNESS.barRoot = os.path.join(REPO, "stock_reference")
-    rt.execute(SETUP, args.vsx, args.vsy, args.ui_scale, not args.no_coms, not args.no_tidal, args.wind)
+    rt.execute(SETUP, args.vsx, args.vsy, args.ui_scale, not args.no_coms, not args.no_tidal, args.wind,
+               args.mm_level, args.share_metal, args.share_energy)
     rt.execute(lua_text(os.path.join(TOOLS, "mock_gl_record.lua")))
     flowui = os.path.join(REPO, "stock_reference", "gui_flowui.lua")
     rt.execute(LOAD_FLOWUI, lua_text(flowui), "@" + flowui, args.legacy)
@@ -664,7 +701,10 @@ def run_widget(args, fonts):
         print(f"widget failed to load: {e}", file=sys.stderr)
         sys.exit(1)
     w = g.widget
-    errors = rt.eval(DRIVER)(w, args.frames, args.vsx, args.vsy)
+    opts = rt.table_from({"calm": args.calm, "used": args.bp_used, "reserved": args.bp_reserved,
+                          "msupport": args.bp_msupport, "esupport": args.bp_esupport,
+                          "windMin": args.bp_wind_min, "windMax": args.bp_wind_max})
+    errors = rt.eval(DRIVER)(w, args.frames, args.vsx, args.vsy, opts)
     errs = [as_str(errors[i]) for i in range(1, len(errors) + 1)]
     return rt, errs
 
@@ -677,7 +717,21 @@ def topbar_box(rt, vsx, vsy):
         e = els[i]
         boxes.append((float(e[1]), float(e[2]), float(e[3]), float(e[4])))
     if not boxes:
-        return None, None
+        # the widget draws its elements without FlowUI's Element: use the area it publishes in WG.topbar
+        # (GetPosition reports the left edge plus the full slant of the first element and the element margin)
+        pos = rt.eval("""function()
+          local t = WG.topbar
+          if not (t and t.GetPosition) then return nil end
+          local p = t.GetPosition()
+          local skew = t.GetSkewConfig and t.GetSkewConfig() or {}
+          local H = p[4] - p[2]
+          local off = skew.useSkew and math.floor(H * (skew.skewTan or 0)) or 0
+          return { p[1] - off - (WG.FlowUI.elementMargin or 0), p[2], p[3], p[4] }
+        end""")()
+        if pos is None:
+            return None, None
+        x1, y1, x2, y2 = float(pos[1]), float(pos[2]), float(pos[3]), float(pos[4])
+        return (x1, vsy - y2, x1, vsy - y1, vsy - y1), x1  # x2: the crop follows what is drawn
     top = [b for b in boxes if b[3] >= vsy - 1] or boxes
     metal = min(top, key=lambda b: b[0])  # the leftmost element at the top edge: metal
     x1 = min(b[0] for b in boxes)
@@ -699,6 +753,7 @@ def main():
     ap.add_argument("--compare", default=None, help="mockup PNG to show above the render (plus a 50%% blend)")
     ap.add_argument("--mockup-bar-height", type=float, default=MOCKUP_BAR_H)
     ap.add_argument("--mockup-metal-x", type=float, default=MOCKUP_METAL_X)
+    ap.add_argument("--mockup-top", type=float, default=MOCKUP_TOP, help="mockup rows above the bar (not shown)")
     ap.add_argument("--crop", default="auto", help="auto | full | x1,y1,x2,y2 (image pixels)")
     ap.add_argument("--scale", type=float, default=1.0, help="upsample the output for viewing")
     ap.add_argument("--ss", type=int, default=2, help="supersampling (antialiasing) factor")
@@ -708,6 +763,18 @@ def main():
     ap.add_argument("--wind", type=float, default=15.2)
     ap.add_argument("--no-coms", action="store_true", help="do not fake >2 teams (stock hides the commander counter then)")
     ap.add_argument("--no-tidal", action="store_true", help="do not fake a water map (hides the tidal element)")
+    ap.add_argument("--calm", action="store_true",
+                    help="no warning effects in the shot: buildpower forks get their stall/idle/need/too-much flags cleared "
+                         "and the alerts off, and the last frame is the warp-in frame (no stock overflow / low-storage flash)")
+    ap.add_argument("--bp-used", type=float, default=None, help="force bp.usedRatio for the shot")
+    ap.add_argument("--bp-reserved", type=float, default=None, help="force bp.reservedRatio")
+    ap.add_argument("--bp-msupport", type=float, default=None, help="force bp.mSupportRatio")
+    ap.add_argument("--bp-esupport", type=float, default=None, help="force bp.eSupportRatio")
+    ap.add_argument("--bp-wind-min", type=float, default=None, help="force bp.eSupportMinWind")
+    ap.add_argument("--bp-wind-max", type=float, default=None, help="force bp.eSupportMaxWind")
+    ap.add_argument("--mm-level", type=float, default=None, help="conversion slider level (mmLevel rules param, default 0.8)")
+    ap.add_argument("--share-metal", type=float, default=None, help="metal share level (default 0.99)")
+    ap.add_argument("--share-energy", type=float, default=None, help="energy share level (default 0.9)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -768,7 +835,7 @@ def main():
         Wd = render.width
         row_h = max(render.height, mock.height)
         mrow = Image.new("RGB", (Wd, row_h), (0, 0, 0))
-        mrow.paste(mock, (dx, 0))
+        mrow.paste(mock, (dx, -int(round(args.mockup_top * f))))
         rrow = Image.new("RGB", (Wd, row_h), (0, 0, 0))
         rrow.paste(render, (0, 0))
         blend = Image.blend(mrow, rrow, 0.5)

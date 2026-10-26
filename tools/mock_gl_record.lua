@@ -520,7 +520,8 @@ end
 local function plainText(text)
 	local segs = parseColored(text, { 1, 1, 1, 1 })
 	local t = {}
-	for i, s in ipairs(segs) do t[i] = s[5] end
+	-- the segments hold the text hex encoded (for the Python side): decode it, widths are of the plain text
+	for i, s in ipairs(segs) do t[i] = s[5]:gsub("%x%x", function(h) return string.char(tonumber(h, 16)) end) end
 	return concat(t)
 end
 REC.widthCache = {}

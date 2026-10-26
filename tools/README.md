@@ -51,3 +51,15 @@ baseline). The guishader (background blur) is ignored: with a flat background th
 Textures missing from `tools/assets` draw as grey at 0.3 alpha and are listed on stdout; `VFS.FileExists`
 answers from `tools/assets` for `Icons/` and `LuaUI/Images/`, so fallbacks happen as in the game when the
 file is not in the BAR repo either.
+
+### Comparing the new design against the mockup
+
+    python3 -I tools/render_widget.py gui_top_bar_new_design.lua --compare tools/assets/mockup_new_design.png \
+        --calm --bp-used 0.5125 --bp-reserved 0.766 --bp-msupport 0.702 --bp-esupport 0.4963 --no-coms \
+        --out /tmp/compare.png --scale 2
+
+`--calm` clears the stall/idle flags and alerts for the shot, `--bp-*` set the gauge to the mockup's state,
+`--mm-level`, `--share-metal`, `--share-energy` move the knobs. The compare image shows the mockup, the render and
+a 50% blend; the mockup is scaled so its strip height (64 px) matches the render and aligned on the metal element.
+The measurement script used for the pixel comparison lives in design/mockup_measurements.md's method section;
+the target was every geometric value within 2% of H and angles within 1.5 degrees.

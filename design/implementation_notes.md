@@ -44,3 +44,19 @@ Implements `integration_design.md` and `bp_feature_spec.md`. These notes list on
 * The BP tooltip is not registered while the resource bars are hidden, options are registered after
   `ViewResize`, and the three table constructors plus the metal/energy area lines are back to stock with
   the BP changes as added lines. Only the five GetInfo lines differ from stock now.
+
+## New design, round 1 (gui_top_bar_new_design.lua against the mockup)
+
+Built from `design/mockup_measurements.md` and checked with `tools/render_widget.py --compare`. Panels are drawn
+as polygons from constants in units of H (`bpUi.D`, `bpUi.C`): opaque, sharp corners, outer slants of 43.5
+(metal) and 41.6 (energy) degrees, 1 px grey outline, hard offset shadows (strip part in uiBgTex, the part
+below the strip in a per-frame scissored list). Metal, gauge and energy touch. The gauge is 1.766 H wide,
+hangs 0.203 H and has chamfered bottom corners; the ring (r 0.435 / 0.581 H, round caps) sweeps from 216 to
+0 degrees with the used, reserved and idle segments, the gold wind arc, the orange energy marker and the white
+metal pointer. Tracks carry the mockup gradient and shadow, fills are flat, metal fills from the gauge outward
+(right to left), knobs are square with a 1 px outline: energy has the white conversion knob and the red share
+knob, metal always gets the red share knob (also in single-player, reversed in adjustSliders). Texts use the
+`s` shadow option and the measured sizes and baselines; the three text flags of each resource are coupled.
+Measured against the mockup every geometric value is within 0.016 H and angles within 1.2 degrees; the
+remaining differences are glyph widths (font), the mockup's own inconsistent fill length (58.6% for 812/1000)
+and its ring tips (51.2% / 76.6% of the sweep for a "50%" label).
