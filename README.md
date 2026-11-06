@@ -9,6 +9,14 @@ Enhance your gaming experience with the new Top Bar Widget for BAR (Beyond All R
 ## Versions
 The `gui_top_bar_alpha.lua` version is the one described here. It is stable :)
 
+### Performance variants (0.4.011)
+Two variants of `gui_top_bar_alpha_0.4.010.lua` with identical features and look, but a cheaper draw path. Only enable one of them at a time (they are separate widgets in the F11 list).
+
+- `gui_top_bar_alpha_0.4.011_light.lua` ("Top Bar with Buildpower 0.4.011 light"): classic display lists, but nothing is rebuilt per frame any more. Data and hover state are refreshed in a single 30 Hz tick, and a display list is only rebuilt when the value or text of that sub-area actually changed. The energy/buildpower flow effect is compiled once per fill width and scrolled through the texture matrix instead of being recompiled every 3 frames. Safe choice, works on any engine that runs 0.4.010.
+- `gui_top_bar_alpha_0.4.011_gl4.lua` ("Top Bar with Buildpower 0.4.011 gl4"): the "units" approach. Every rectangle of the three resource bars is one instance in a GPU instance buffer, drawn by one GLSL shader (rounded corners, gradients, glow, scrolling flow effect, blinking all done in the shader). Per frame the bars cost a handful of instanced draw calls; a value change only overwrites one instance. Needs the GL4 engine features BAR itself uses (`gl.InstanceVBOTable`, `gl.LuaShader`). If they are missing or the shader fails to compile, the widget prints the reason and removes itself; use the light variant then.
+
+Both variants have only been syntax-checked and mock-tested, not yet compared side by side in game. Use the "Widget Profiler" widget (F11 list) to compare their Draw/Update times against 0.4.010.
+
 ## Installation Guide
 
 ### Step 1: Download the Widget
