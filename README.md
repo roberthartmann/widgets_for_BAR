@@ -9,13 +9,16 @@ Enhance your gaming experience with the new Top Bar Widget for BAR (Beyond All R
 ## Versions
 The `gui_top_bar_alpha.lua` version is the one described here. It is stable :)
 
-### Performance variants (0.4.011)
-Two variants of `gui_top_bar_alpha_0.4.010.lua` with identical features and look, but a cheaper draw path. Only enable one of them at a time (they are separate widgets in the F11 list).
+### Current variants (0.5.001): buildpower on top of the official top bar
+Both files are the **current official BAR top bar** (an unmodified copy is kept in `reference/` for diffing) plus the buildpower bar. They replace the stock "Top Bar": disable "Top Bar" and enable exactly one of them. The buttons row is no longer part of the top bar in current BAR; keep the stock "Top Bar Buttons" widget enabled.
 
-- `gui_top_bar_alpha_0.4.011_light.lua` ("Top Bar with Buildpower 0.4.011 light"): classic display lists, but nothing is rebuilt per frame any more. Data and hover state are refreshed in a single 30 Hz tick, and a display list is only rebuilt when the value or text of that sub-area actually changed. The energy/buildpower flow effect is compiled once per fill width and scrolled through the texture matrix instead of being recompiled every 3 frames. Safe choice, works on any engine that runs 0.4.010.
-- `gui_top_bar_alpha_0.4.011_gl4.lua` ("Top Bar with Buildpower 0.4.011 gl4"): the "units" approach. Every rectangle of the three resource bars is one instance in a GPU instance buffer, drawn by one GLSL shader (rounded corners, gradients, glow, scrolling flow effect, blinking all done in the shader). Per frame the bars cost a handful of instanced draw calls; a value change only overwrites one instance. Needs the GL4 engine features BAR itself uses (`gl.InstanceVBOTable`, `gl.LuaShader`). If they are missing or the shader fails to compile, the widget prints the reason and removes itself; use the light variant then.
+- `gui_top_bar_alpha_0.5.001_light.lua` ("Top Bar with Buildpower 0.5.001 light"): the official bar's own rendering (static parts rendered once into textures, value bars as display lists rebuilt only when their pixel width changes, texts only when the string changes) extended by a green buildpower bar between metal and energy: used BP fill, reserved BP overlay, percentage text, metal/energy supported-BP markers, wind range strip, stall flash, alerts and tooltips. Options (buildpower bar, eco indicators, wind range, debug tooltip) appear under the widget in the options menu. Safe choice.
+- `gui_top_bar_alpha_0.5.001_gl4.lua` ("Top Bar with Buildpower 0.5.001 gl4"): same features, but every rectangle of the three bars (fills, glow, overlays, flash, slider knobs, markers) is one instance in a GPU instance buffer drawn by one shader, normally a single draw call per frame. Needs the GL4 engine features BAR itself uses; if they are missing or the shader fails to compile the widget prints the reason, recommends the light variant and removes itself.
 
-Both variants have only been syntax-checked and mock-tested, not yet compared side by side in game. Use the "Widget Profiler" widget (F11 list) to compare their Draw/Update times against 0.4.010.
+Neither has been compared side by side in game yet. Use the "Widget Profiler" widget to compare their Draw/Update milliseconds against the stock "Top Bar".
+
+### Older variants
+`old_versions/` keeps the 0.4.x line (based on a 2024 top bar) including the 0.4.011 light/gl4 experiments. They do not load on current BAR without fixes and are kept for reference only.
 
 ## Installation Guide
 
