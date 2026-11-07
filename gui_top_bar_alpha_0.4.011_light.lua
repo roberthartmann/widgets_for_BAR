@@ -582,8 +582,35 @@ if Spring.GetMenuName and string.find(string.lower(Spring.GetMenuName()), 'chobb
 	Spring.SendLuaMenuMsg("disableLobbyButton")
 end
 
-local numPlayers = Spring.Utilities.GetPlayerCount()
-local isSinglePlayer = Spring.Utilities.Gametype.IsSinglePlayer()
+-- compat: current BAR moved Spring.Utilities to BAR.Utilities; older builds only have Spring.Utilities.
+-- Fall back to counting the players on non-AI teams ourselves if neither helper exists.
+local numPlayers, isSinglePlayer
+do
+	local utilities = (BAR and BAR.Utilities) or Spring.Utilities
+	if utilities and utilities.GetPlayerCount then
+		numPlayers = utilities.GetPlayerCount()
+	end
+	if utilities and utilities.Gametype and utilities.Gametype.IsSinglePlayer then
+		isSinglePlayer = utilities.Gametype.IsSinglePlayer()
+	end
+	if numPlayers == nil or isSinglePlayer == nil then
+		local count = 0
+		local gaiaTeamID = Spring.GetGaiaTeamID()
+		for _, teamID in ipairs(Spring.GetTeamList() or {}) do
+			local isAI = select(4, Spring.GetTeamInfo(teamID, false))
+			if teamID ~= gaiaTeamID and not isAI then
+				count = count + #(Spring.GetPlayerList(teamID) or {})
+			end
+		end
+		if numPlayers == nil then
+			numPlayers = count
+		end
+		if isSinglePlayer == nil then
+			isSinglePlayer = (count <= 1)
+		end
+	end
+	numPlayers = numPlayers or 0
+end
 
 local isSingle = false
 if not spec then
