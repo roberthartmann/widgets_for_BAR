@@ -42,6 +42,12 @@ Performance changes vs 0.4.010 (light variant, draw path only, visuals and featu
     was recompiled and leaked every 0.1 s).
 ]]
 
+-- compat: current BAR provides translations as BAR.I18N; older builds as Spring.I18N.
+-- This file calls Spring.I18N everywhere, so alias it if only the new name exists.
+if Spring.I18N == nil and BAR ~= nil and BAR.I18N ~= nil then
+	Spring.I18N = BAR.I18N
+end
+
 -------------------------------CONFIG------------------------------------------
 -------------------------------------------------------------------------------
 

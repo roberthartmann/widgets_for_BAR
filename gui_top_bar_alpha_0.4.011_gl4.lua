@@ -74,6 +74,12 @@ mocked lupa run with BAR's real modules/graphics/instancevbotable.lua)
   scale/direction, texture orientation) has not been compared on screen.
 ]]
 
+-- compat: current BAR provides translations as BAR.I18N; older builds as Spring.I18N.
+-- This file calls Spring.I18N everywhere, so alias it if only the new name exists.
+if Spring.I18N == nil and BAR ~= nil and BAR.I18N ~= nil then
+	Spring.I18N = BAR.I18N
+end
+
 -------------------------------CONFIG------------------------------------------
 -------------------------------------------------------------------------------
 
