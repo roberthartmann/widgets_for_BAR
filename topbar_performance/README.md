@@ -72,7 +72,28 @@ Kosten des Caches: maximal etwa 1000 kleine Display-Listen im Grafikspeicher
 (wenige MB). Die Zahl ist durch die Balkenbreite begrenzt und steigt nicht mit der
 Spieldauer.
 
-### Im Spiel
+### Im Spiel: `bench/dbg_topbar_bench.lua` (empfohlen)
+
+Der F11-Profiler zeigt einen gleitenden Mittelwert in 0,1-%-Schritten.
+0,8 % gegen 0,9 % liegt im Rauschen. Das Bench-Widget misst jeden einzelnen
+`DrawScreen`/`Update`/`GameFrame`-Aufruf in µs und gibt alle 30 s Median, Mittelwert,
+p95, Maximum und ms/s aus (Chat + infolog, Präfix `[TopBarBench]`).
+
+* **Median** = feste Kosten pro Frame
+* **Mittelwert deutlich über Median** = die Kosten stecken in seltenen teuren
+  Frames (Listen-Kompilierung, Render-to-Texture). Genau dort setzen die bisherigen
+  Änderungen an.
+
+Regeln für einen gültigen Vergleich:
+1. **Nie beide Varianten gleichzeitig aktiv.** Sie teilen sich `WG.topbar`
+   (die zuletzt geladene überschreibt die Funktionen der anderen), den GUI-Shader-Key
+   `topbar_background` und die Tooltip-Namen. Außerdem zeichnen beide alles doppelt.
+   Das Bench-Widget warnt, wenn es zwei Varianten sieht.
+2. Gleiche Situation: am besten ein **Replay**, gleiche Spielminute, Kamera fest,
+   gleiches FPS-Limit, Maus nicht über der Leiste.
+3. Pro Variante mindestens 2 Messfenster abwarten.
+
+### Im Spiel: Abschnitts-Profiler
 
 `WIP/topbar_profiler_snippet.lua` zeigt pro Abschnitt ms/Frame und
 Listen-Kompilierungen pro Sekunde. In der offiziellen Datei gehört er direkt
