@@ -15,6 +15,19 @@ Both files are the **current official BAR top bar** (an unmodified copy is kept 
 - `gui_top_bar_alpha_0.5.001_light.lua` ("Top Bar with Buildpower 0.5.001 light"): the official bar's own rendering (static parts rendered once into textures, value bars as display lists rebuilt only when their pixel width changes, texts only when the string changes) extended by a green buildpower bar between metal and energy: used BP fill, reserved BP overlay, percentage text, metal/energy supported-BP markers, wind range strip, stall flash, alerts and tooltips. Options (buildpower bar, eco indicators, wind range, debug tooltip) appear under the widget in the options menu. Safe choice.
 - `gui_top_bar_alpha_0.5.001_gl4.lua` ("Top Bar with Buildpower 0.5.001 gl4"): same features, but every rectangle of the three bars (fills, glow, overlays, flash, slider knobs, markers) is one instance in a GPU instance buffer drawn by one shader, normally a single draw call per frame. Needs the GL4 engine features BAR itself uses; if they are missing or the shader fails to compile the widget prints the reason, recommends the light variant and removes itself.
 
+### Performance ladder (0.5.002 to 0.5.004)
+Each file builds on the previous one. All of them replace the stock "Top Bar"; enable exactly one. GL calls and allocation are mock-harness numbers for a steady frame with the sim running.
+
+| File | Adds | GL calls / frame | Draw calls |
+|---|---|---|---|
+| `gui_top_bar_alpha_0.5.001_gl4.lua` | bars as GPU instances | 29 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.002_gl4_lean.lua` | no Update callin (tick from GameFrame / IsAbove), no per-frame uniforms (engine timeInfo), one texture atlas, no draw-path allocation | 15 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.002_gl4_lean_scan.lua` | lean + cheaper builder scan (GetUnitWorkerTask, no coroutine, no per-pass tables; roughly half the Lua time per frame at 1000 builders) | 15 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.003_gl4_onedraw.lua` | lean + background/UI blits, wind blades and tidal wave folded into the single instanced draw | 11 | 1 |
+| `gui_top_bar_alpha_0.5.004_gl4_glyphs.lua` | onedraw + all texts as glyph instances from a font atlas; no render-to-texture after init except on resize / language change | 13 | 1 |
+
+The builder-scan change (lean_scan) is independent of the draw-path steps and can be combined with onedraw/glyphs once the comparison shows which parts pay off.
+
 Neither has been compared side by side in game yet. Use the "Widget Profiler" widget to compare their Draw/Update milliseconds against the stock "Top Bar".
 
 ### Older variants
