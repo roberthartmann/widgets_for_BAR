@@ -3,7 +3,7 @@ local widget = widget ---@type Widget
 function widget:GetInfo()
 	return {
 		name = "Top Bar",
-		desc = "Shows resources, wind speed and the commander counter.",
+		desc = "Shows resources, wind speed and the commander counter. (performance build: official Top Bar + caching fixes, see topbar_performance/README.md)",
 		author = "Floris",
 		date = "Feb, 2017",
 		license = "GNU GPL, v2 or later",
@@ -189,6 +189,15 @@ local dlist = {
 -- Caching (consolidated into table to save local slots)
 local cache = {
 	lastPullIncomeText = { metal = -1, energy = -1 },
+	lastIncomeText = { metal = -1, energy = -1 },
+	-- PERF: per-width display list cache for the resource fill bar (+ energy glow).
+	-- The bar width changes by a pixel almost every update; before, each change
+	-- recompiled 1 (metal) / 5 (energy) display lists in DrawScreen. Widths are bounded
+	-- by the bar width in pixels, and the value oscillates in a small range, so after a
+	-- short warm-up nearly every update is a cache hit (zero compiles).
+	barLists = { metal = {}, energy = {} }, -- [valueWidth] = { bar, glow1, glow2, glow3, glow4 }
+	barListsCount = { metal = 0, energy = 0 },
+	barListsGeom = { metal = {}, energy = {} }, -- geometry/storage the cached lists were built for
 	lastStorageValue = { metal = -1, energy = -1 },
 	lastStorageText = { metal = "", energy = "" },
 	lastWarning = { metal = nil, energy = nil },
@@ -198,6 +207,39 @@ local cache = {
 	warningCleared = { metal = false, energy = false },
 	showIndicators = true,
 }
+
+-- PERF: delete all cached fill bar lists of a resource (or of both when res is nil)
+local function flushBarLists(res)
+	if not res then
+		flushBarLists("metal")
+		flushBarLists("energy")
+		return
+	end
+	for width, entry in pairs(cache.barLists[res]) do
+		glDeleteList(entry[1])
+		if entry.glow then
+			for i = 1, 4 do
+				glDeleteList(entry.glow[i])
+			end
+		end
+		cache.barLists[res][width] = nil
+	end
+	cache.barListsCount[res] = 0
+	dlist.resValuesBar[res] = nil
+	if res == "energy" then
+		dlist.energyGlow = nil
+	end
+	cache.lastValueWidth[res] = -1
+end
+
+-- PERF: preallocated scissor rects for the resbar text render-to-texture updates
+cache.textScissors = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 } }
+cache.activeTextScissors = {}
+local function setTextScissor(n, x, y, w, h)
+	local sc = cache.textScissors[n]
+	sc[1], sc[2], sc[3], sc[4] = x, y, w, h
+	cache.activeTextScissors[n] = sc
+end
 
 -- Reused scratch tables for DrawScreen to avoid per-frame allocations.
 local resourceNames = { "metal", "energy" }
@@ -292,9 +334,8 @@ function widget:ViewResize()
 	for res, _ in pairs(dlist.resValues) do
 		dlist.resValues[res] = glDeleteList(dlist.resValues[res])
 	end
-	for res, _ in pairs(dlist.resValuesBar) do
-		dlist.resValuesBar[res] = glDeleteList(dlist.resValuesBar[res])
-	end
+	-- PERF: resValuesBar/energyGlow now point into the per-width cache; free it all
+	flushBarLists()
 
 	-- Reset cache.lastValueWidth so display lists are recreated with new dimensions
 	cache.lastValueWidth = { metal = -1, energy = -1 }
@@ -303,13 +344,21 @@ function widget:ViewResize()
 end
 
 -- --- OPTIMIZATION: Memoized short() function to reduce string allocations.
+-- PERF: cache keyed by the number itself (one sub-table per precision) instead of
+-- building a "n:f" key string, which allocated a new string on every call - even on
+-- cache hits - and made the memoization cost more than it saved.
 local shortCache = {}
 local shortCacheCount = 0
 local function short(n, f)
 	f = f or 0
-	local key = n .. ":" .. f
-	if shortCache[key] then
-		return shortCache[key]
+	local fCache = shortCache[f]
+	if not fCache then
+		fCache = {}
+		shortCache[f] = fCache
+	end
+	local cached = fCache[n]
+	if cached then
+		return cached
 	end
 
 	local result
@@ -325,9 +374,13 @@ local function short(n, f)
 	if shortCacheCount > 500 then
 		shortCache = {}
 		shortCacheCount = 0
+		fCache = {}
+		shortCache[f] = fCache
 	end
 
-	shortCache[key] = result
+	if n == n then -- NaN can't be a table key
+		fCache[n] = result
+	end
 	shortCacheCount = shortCacheCount + 1
 	return result
 end
@@ -644,8 +697,11 @@ local function updateResbarText(res, force)
 		end
 	end
 
-	if cache.lastPullIncomeText[res] ~= short(r[res][3]) .. " " .. short(r[res][4]) then
-		cache.lastPullIncomeText[res] = short(r[res][3]) .. " " .. short(r[res][4])
+	-- PERF: compare the (memoized) strings directly instead of concatenating them twice
+	local pullText, incomeText = short(r[res][3]), short(r[res][4])
+	if cache.lastPullIncomeText[res] ~= pullText or cache.lastIncomeText[res] ~= incomeText then
+		cache.lastPullIncomeText[res] = pullText
+		cache.lastIncomeText[res] = incomeText
 		updateRes[res][2] = true
 	end
 
@@ -1294,14 +1350,49 @@ local function updateResbarValues(res, update)
 		if valueWidth < mathCeil(barSize) then
 			valueWidth = mathCeil(barSize)
 		end
+
+		-- PERF: drop the per-width list cache when the geometry or the storage the lists
+		-- were built for changed (barTexRect x1/y1/y2, barArea, raw storage for glowAlpha)
+		local texRect = resbarDrawinfo[res].barTexRect
+		local barArea = resbarDrawinfo[res].barArea
+		local geom = cache.barListsGeom[res]
+		local storage = r[res][2]
+		if
+			geom[1] ~= texRect[1]
+			or geom[2] ~= texRect[2]
+			or geom[3] ~= texRect[4]
+			or geom[4] ~= barArea[1]
+			or geom[5] ~= barArea[2]
+			or geom[6] ~= barArea[3]
+			or geom[7] ~= barArea[4]
+			or geom[8] ~= storage
+			or cache.barListsCount[res] > 1000 -- safety net, normally bounded by bar width in px
+		then
+			flushBarLists(res)
+			geom[1], geom[2], geom[3] = texRect[1], texRect[2], texRect[4]
+			geom[4], geom[5], geom[6], geom[7] = barArea[1], barArea[2], barArea[3], barArea[4]
+			geom[8] = storage
+			cache.lastValueWidth[res] = -1
+		end
+
 		if valueWidth ~= cache.lastValueWidth[res] then -- only recalc if the width changed
 			cache.lastValueWidth[res] = valueWidth
 
-			-- resbar
-			if dlist.resValuesBar[res] then
-				glDeleteList(dlist.resValuesBar[res])
+			local entry = cache.barLists[res][valueWidth]
+			if entry then
+				-- cache hit: no display list compile at all
+				dlist.resValuesBar[res] = entry[1]
+				if res == "energy" then
+					dlist.energyGlow = entry.glow
+				end
+				return
 			end
-			dlist.resValuesBar[res] = glCreateList(function()
+			entry = {}
+			cache.barLists[res][valueWidth] = entry
+			cache.barListsCount[res] = cache.barListsCount[res] + 1
+
+			-- resbar
+			entry[1] = glCreateList(function()
 				local glowSize = barHeight * 7
 				local color1, color2, glowAlpha
 
@@ -1397,14 +1488,9 @@ local function updateResbarValues(res, update)
 			-- energy glow effect: static geometry lists (texture offset baked at 0); the
 			-- slow texture scroll is applied per-frame via the texture matrix in
 			-- drawResBars, so the lists no longer get rebuilt at the 20Hz update rate
+			dlist.resValuesBar[res] = entry[1]
 			if res == "energy" then
-				local glow = dlist.energyGlow
-				if glow then
-					glDeleteList(glow[1])
-					glDeleteList(glow[2])
-					glDeleteList(glow[3])
-					glDeleteList(glow[4])
-				end
+				local glow
 				local gx1 = resbarDrawinfo[res].barTexRect[1]
 				local gy1 = resbarDrawinfo[res].barTexRect[2]
 				local gx2 = gx1 + valueWidth
@@ -1430,6 +1516,7 @@ local function updateResbarValues(res, update)
 					RectRound(gx1 - addedSize, gy1 - addedSize, gx2 + addedSize, gy2 + addedSize, barHeight * 0.33)
 					glBlending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 				end)
+				entry.glow = glow
 				dlist.energyGlow = glow
 			end
 		end
@@ -1740,7 +1827,6 @@ end
 function widget:Update(dt)
 	now = osClock()
 
-	provideButtonFallbacks()
 	timers.deferResourceUpdate = timers.gameFrameHappened and now - timers.lastUpdateTime < (1 / 30)
 	timers.gameFrameHappened = false
 	timers.lastUpdateTime = now
@@ -1749,6 +1835,10 @@ function widget:Update(dt)
 
 	if now > timers.nextStateCheck then
 		timers.nextStateCheck = now + 0.0333
+
+		-- PERF: was called every frame (7 WG table lookups); 30x/s is plenty to notice the
+		-- Top Bar Buttons widget appearing/disappearing
+		provideButtonFallbacks()
 
 		local prevMyTeamID = myTeamID
 		local newMyTeamID = sp.GetMyTeamID()
@@ -2049,62 +2139,54 @@ local function drawResBars()
 	end
 
 	if update then
-		local scissors = {}
-		res = "metal"
-		if updateRes[res][1] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textCurrent[2] - topbarArea[1]) - (cache.lastResbarValueWidth[res] * 0.75),
-				(topbarArea[4] - topbarArea[2]) * 0.48,
-				resbarDrawinfo[res].textCurrent[4] + cache.lastResbarValueWidth[res],
-				topbarArea[4] - topbarArea[2],
-			}
-		end
-		if updateRes[res][2] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textPull[2] - topbarArea[1]) - (resbarDrawinfo[res].textPull[4] * 3.4),
-				0,
-				resbarDrawinfo[res].textPull[4] * 3.5,
-				topbarArea[4] - topbarArea[2],
-			}
-		end
-		if updateRes[res][3] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textStorage[2] - topbarArea[1]) - (resbarDrawinfo[res].textStorage[4] * 4),
-				(topbarArea[4] - topbarArea[2]) * 0.48,
-				resbarDrawinfo[res].textStorage[4] * 4.1,
-				topbarArea[4] - topbarArea[2],
-			}
-		end
-		res = "energy"
-		if updateRes[res][1] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textCurrent[2] - topbarArea[1]) - (cache.lastResbarValueWidth[res] * 0.75),
-				(topbarArea[4] - topbarArea[2]) * 0.48,
-				resbarDrawinfo[res].textCurrent[4] + cache.lastResbarValueWidth[res],
-				topbarArea[4] - topbarArea[2],
-			}
-		end
-		if updateRes[res][2] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textPull[2] - topbarArea[1]) - (resbarDrawinfo[res].textPull[4] * 3.4),
-				0,
-				resbarDrawinfo[res].textPull[4] * 3.5,
-				topbarArea[4] - topbarArea[2],
-			}
-		end
-		if updateRes[res][3] then
-			scissors[#scissors + 1] = {
-				(resbarDrawinfo[res].textStorage[2] - topbarArea[1]) - (resbarDrawinfo[res].textStorage[4] * 4),
-				(topbarArea[4] - topbarArea[2]) * 0.48,
-				resbarDrawinfo[res].textStorage[4] * 4.1,
-				topbarArea[4] - topbarArea[2],
-			}
+		-- PERF: reuse preallocated scissor tables instead of allocating up to 7 new
+		-- tables every 50ms
+		local n = 0
+		local topbarH = topbarArea[4] - topbarArea[2]
+		for i = 1, 2 do
+			res = resourceNames[i]
+			local info = resbarDrawinfo[res]
+			local upd = updateRes[res]
+			if upd[1] then
+				n = n + 1
+				setTextScissor(
+					n,
+					(info.textCurrent[2] - topbarArea[1]) - (cache.lastResbarValueWidth[res] * 0.75),
+					topbarH * 0.48,
+					info.textCurrent[4] + cache.lastResbarValueWidth[res],
+					topbarH
+				)
+			end
+			if upd[2] then
+				n = n + 1
+				setTextScissor(
+					n,
+					(info.textPull[2] - topbarArea[1]) - (info.textPull[4] * 3.4),
+					0,
+					info.textPull[4] * 3.5,
+					topbarH
+				)
+			end
+			if upd[3] then
+				n = n + 1
+				setTextScissor(
+					n,
+					(info.textStorage[2] - topbarArea[1]) - (info.textStorage[4] * 4),
+					topbarH * 0.48,
+					info.textStorage[4] * 4.1,
+					topbarH
+				)
+			end
 		end
 
 		-- skip the whole FBO roundtrip when no text region actually changed
 		-- (an empty scissors list would clear the entire texture!)
-		if scissors[1] then
-			r2tHelper.RenderToTexture(uiTex, renderResbarText, true, scissors)
+		if n > 0 then
+			local active = cache.activeTextScissors
+			for i = n + 1, 6 do -- clear all leftovers so both # and ipairs see exactly n
+				active[i] = nil
+			end
+			r2tHelper.RenderToTexture(uiTex, renderResbarText, true, active)
 		end
 	end
 end
@@ -2820,12 +2902,6 @@ function widget:Shutdown()
 		dlist.blendBg = glDeleteList(dlist.blendBg)
 		dlist.blendUi = glDeleteList(dlist.blendUi)
 
-		if dlist.energyGlow then
-			for i = 1, 4 do
-				glDeleteList(dlist.energyGlow[i])
-			end
-			dlist.energyGlow = nil
-		end
 
 		for n, _ in pairs(dlist.windText) do
 			dlist.windText[n] = glDeleteList(dlist.windText[n])
@@ -2839,10 +2915,10 @@ function widget:Shutdown()
 		for res, _ in pairs(dlist.resValues) do
 			dlist.resValues[res] = glDeleteList(dlist.resValues[res])
 		end
-		for res, _ in pairs(dlist.resValuesBar) do
-			dlist.resValuesBar[res] = glDeleteList(dlist.resValuesBar[res])
-		end
 	end
+
+	-- PERF: energy glow + fill bar lists live in the per-width cache
+	flushBarLists()
 
 	if uiBgTex then
 		gl.DeleteTexture(uiBgTex)

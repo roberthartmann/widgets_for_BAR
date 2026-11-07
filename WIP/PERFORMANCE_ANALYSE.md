@@ -1,5 +1,8 @@
 # Performance-Analyse Top Bar (Basis: `gui_top_bar_alpha_0.4.010.lua`)
 
+> **Hinweis:** Diese Analyse betrifft die alte BP-Version. Die Performance-Arbeit
+> auf Basis der **offiziellen** Top Bar liegt in `topbar_performance/` (siehe README dort).
+
 > Die im Screenshot gezeigte Version `0.4.011 light` ist nicht im Repo.
 > Zeilennummern beziehen sich auf 0.4.010. Die Muster unten sind aber genau die,
 > die "Optimierungen" typischerweise ins Gegenteil drehen.
