@@ -24,6 +24,7 @@ local stats = {
 local compiling = 0
 
 -- simulated clock (the widget uses os.clock for all its timers)
+local realClock = os.clock
 local simTime = 0
 os.clock = function() return simTime end
 
@@ -142,6 +143,11 @@ Spring = setmetatable({
 	GetModOptions = function() return { debugcommands = "", map_waterlevel = 0 } end,
 	GetTeamInfo = function() return 0, 0, false, false, "", 0 end,
 	GetTeamUnitDefCount = function() return 1 end,
+	-- timers follow the simulated clock, so self-bench windows elapse in sim time
+	GetTimer = function() return simTime end,
+	GetTimerMicros = function() return realClock() end, -- real CPU time: self-bench measures actual Lua cost
+	DiffTimers = function(a, b, ms) local d = a - b return ms and d * 1000 or d end,
+	Echo = print,
 	Utilities = stubTable("Utilities"),
 }, { __index = function(t, k) local f = function() end rawset(t, k, f) return f end })
 

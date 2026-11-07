@@ -72,26 +72,50 @@ Kosten des Caches: maximal etwa 1000 kleine Display-Listen im Grafikspeicher
 (wenige MB). Die Zahl ist durch die Balkenbreite begrenzt und steigt nicht mit der
 Spieldauer.
 
-### Im Spiel: `bench/dbg_topbar_bench.lua` (empfohlen)
+### Wichtig: User-Widgets zahlen einen festen Sandbox-Aufschlag
 
-Der F11-Profiler zeigt einen gleitenden Mittelwert in 0,1-%-Schritten.
-0,8 % gegen 0,9 % liegt im Rauschen. Das Bench-Widget misst jeden einzelnen
-`DrawScreen`/`Update`/`GameFrame`-Aufruf in µs und gibt alle 30 s Median, Mittelwert,
-p95, Maximum und ms/s aus (Chat + infolog, Präfix `[TopBarBench]`).
+`barwidgets.lua` legt um **jeden Callin eines User-Widgets** (`LuaUI/Widgets/`
+im Datenordner) einen Memory Guard (`luaui/Include/memory_guard.lua`). Pro Aufruf
+laufen dann 2× `collectgarbage("count")` und 2× `debug.sethook`, und die VM läuft
+mit aktivem Count-Hook. Das offizielle **Mod**-Widget aus dem Spielarchiv zahlt
+das nicht.
 
-* **Median** = feste Kosten pro Frame
-* **Mittelwert deutlich über Median** = die Kosten stecken in seltenen teuren
-  Frames (Listen-Kompilierung, Render-to-Texture). Genau dort setzen die bisherigen
-  Änderungen an.
+Ein Vergleich „Top Bar (Mod)“ gegen „Top Bar perf (User)“ im F11-Profiler
+benachteiligt also immer die User-Kopie, auch wenn der Code identisch ist.
+Bei ~285 fps (≈ 570 DrawScreen+Update-Aufrufe/s) reicht das für die
+beobachteten +0,1 %. Fair vergleicht man nur zwei User-Widgets miteinander.
 
-Regeln für einen gültigen Vergleich:
-1. **Nie beide Varianten gleichzeitig aktiv.** Sie teilen sich `WG.topbar`
-   (die zuletzt geladene überschreibt die Funktionen der anderen), den GUI-Shader-Key
-   `topbar_background` und die Tooltip-Namen. Außerdem zeichnen beide alles doppelt.
-   Das Bench-Widget warnt, wenn es zwei Varianten sieht.
-2. Gleiche Situation: am besten ein **Replay**, gleiche Spielminute, Kamera fest,
-   gleiches FPS-Limit, Maus nicht über der Leiste.
-3. Pro Variante mindestens 2 Messfenster abwarten.
+Außerdem dürfen User-Widgets andere Widgets nicht inspizieren
+(`widgetHandler.widgets is not available to user widgets`). Ein externes
+Mess-Widget ist daher nicht möglich.
+
+### Im Spiel: Self-Bench-Varianten (empfohlen)
+
+`bench/variants/` enthält zwei Dateien. Beide laufen als User-Widget, werden
+also von der Sandbox gleich behandelt:
+
+| Datei | Widget-Name | Code |
+|-------|-------------|------|
+| `gui_top_bar_BENCH_official.lua` | Top Bar BENCH official | offizielle Basis (Commit `57f4203`) |
+| `gui_top_bar_BENCH_perf.lua` | Top Bar BENCH perf | Performance-Build |
+
+Am Ende beider Dateien hängt derselbe Messblock (`bench/selfbench_block.lua`).
+Er misst die eigenen Callins von innen, also **ohne** den Sandbox-Aufschlag, und
+schreibt alle 30 s pro Callin Median, Mittelwert, p95, Maximum, Spitzen und ms/s
+in Chat und infolog (`[TopBarSelfBench]`). Neu erzeugen:
+`bench/make_bench_variants.sh`.
+
+Ablauf:
+1. Beide Dateien nach `LuaUI/Widgets/` kopieren (sie sind standardmäßig aus).
+2. Replay laden. In F11 die normale „Top Bar“ **aus** und **nur eine**
+   BENCH-Variante an.
+3. Mindestens 2–3 Fenster zu je 30 s abwarten, Kamera fest, gleiches FPS-Limit.
+4. Variante wechseln, an dieselbe Replay-Stelle springen, wiederholen.
+5. Die `[TopBarSelfBench]`-Zeilen aus `infolog.txt` vergleichen.
+
+Lesart: **Median** = feste Kosten pro Frame. **„spikes (% of time)“** = Anteil der
+Zeit in teuren Einzelframes (Listen-Kompilierung, Render-to-Texture). Die bisherigen
+Änderungen sollen genau diesen Anteil senken. Der Median sollte gleich bleiben.
 
 ### Im Spiel: Abschnitts-Profiler
 
