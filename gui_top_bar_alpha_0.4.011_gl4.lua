@@ -1913,9 +1913,13 @@ function gl4.updateResbarTooltips(res)
 			local totalAvailableBP = BP[4]
 			local avgTotalUsedBP = math_round(BP[5])
 
-			local percentAssigned = math_floor((avgTotalReservedBP / totalAvailableBP * 100) + 0.5)
-			local percentActive = math_floor((avgTotalUsedBP / totalAvailableBP * 100) + 0.5)
-			local percentIdle = math_floor(((totalAvailableBP - avgTotalReservedBP) / totalAvailableBP * 100) + 0.5)
+			-- no builders yet (game start): avoid 0/0 = NaN, which string.format rejects on current engines
+			local percentAssigned, percentActive, percentIdle = 0, 0, 0
+			if totalAvailableBP > 0 then
+				percentAssigned = math_floor((avgTotalReservedBP / totalAvailableBP * 100) + 0.5)
+				percentActive = math_floor((avgTotalUsedBP / totalAvailableBP * 100) + 0.5)
+				percentIdle = math_floor(((totalAvailableBP - avgTotalReservedBP) / totalAvailableBP * 100) + 0.5)
+			end
 
 			if percentAssigned < 0 then
 				percentAssigned = 0
