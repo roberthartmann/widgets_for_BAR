@@ -22,8 +22,7 @@ function widget:GetInfo()
 	}
 end
 
-local function LayerBracketShared.
-function LayerBracketShared(widget, side, bracketLayer, reportSeconds)
+local function LayerBracketShared(widget, side, bracketLayer, reportSeconds)
 	local spEcho = Spring.Echo
 	local getTimer = Spring.GetTimerMicros or Spring.GetTimer
 	local diffTimers = Spring.DiffTimers

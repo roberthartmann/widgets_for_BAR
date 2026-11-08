@@ -55,6 +55,12 @@ Lua microseconds per rendered frame at 60 fps with the sim at 30 Hz, median of 3
 
 Reproduce: scenario `scen_bench.lua` in the harness folders of this session (not part of the repo).
 
+### Measuring in game (tools/)
+The stock Widget Profiler wraps every callin in two timer reads, shows a share of a fluctuating total and smooths over 2 s, so for callins of a few microseconds it mostly shows its own overhead and the moment's noise. Two better tools, both user widgets (copy to `data/luaui/widgets`, enable in F11):
+
+- `tools/dbg_layer_bracket_a.lua` + `tools/dbg_layer_bracket_b.lua`: enable both. They sit one layer below and above -95000 (the layer of Top Bar and Top Bar Buttons and of all variants here) and measure, with the microsecond timer, how long everything on that layer takes per DrawScreen, Update and GameFrame: average, median, p95, max and Lua allocation, echoed every 10 s and on `/bracketreport` (`/bracketreset` restarts the window). No per-callin hooks, no smoothing, long windows. Keep the same Buttons widget enabled while comparing top bars, since both share the layer.
+- `tools/dbg_widget_ab_bench.lua`: edit the candidate list at the top, then `/abbench start`. It enables one candidate at a time (plus "none" as baseline), measures the real frame time for 8 s each over 4 rotating rounds and prints per candidate the median frame time, its spread between rounds, p90, allocation and the delta against "none" in microseconds and in percent of the frame. This includes GL driver and engine cost that no Lua profiler sees. Needs an uncapped frame rate (`/vsync 0`, max fps 0), a static camera and a paused game or a replay, otherwise the noise is larger than the differences.
+
 ### Older variants
 `old_versions/` keeps the 0.4.x line (based on a 2024 top bar) including the 0.4.011 light/gl4 experiments. They do not load on current BAR without fixes and are kept for reference only.
 
