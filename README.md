@@ -34,6 +34,27 @@ Neither has been compared side by side in game yet. Use the "Widget Profiler" wi
 ### Top Bar Buttons (0.1.001 lean)
 `gui_top_bar_buttons_alpha_0.1.001_lean.lua` ("Top Bar Buttons 0.1.001 lean") replaces the stock "Top Bar Buttons" widget (unmodified copy in `reference/`), same buttons, badge, auto-hide, quit/resign and save dialogs, keys and `WG.topbar` fallbacks. Changes: no Update callin (the stock one created three closures per frame for the top bar fallbacks), the strip is rendered once into a texture and drawn with one display list, hover highlight is one cached list per button instead of four immediate-mode rectangles per frame, the changelog pulse is time based, and the dialogs are rebuilt only when something they show changes instead of every frame. Mock numbers per frame, official vs lean: idle 3 vs 1 GL calls, hovering 164 vs 2, quit dialog open about 1055 vs 1, allocation 192 B vs 0 idle and 13 kB vs 0 with the quit dialog open.
 
+### Benchmark (mock harness, same scenario for every file)
+Lua microseconds per rendered frame at 60 fps with the sim at 30 Hz, median of 3 runs, 1920x1080. "Draw path" = DrawScreen + Update/IsAbove; "BP scan" = GameFrame (the stock top bar has no buildpower tracking, so its GameFrame is ~0.3 us). GL calls = Lua->GL calls per frame. Allocation is per frame with ~384 B of harness overhead already subtracted. Absolute numbers include mock overhead; the ratios are what matters.
+
+| Top bar file | draw path running | draw path paused | BP scan, 10 builders | BP scan, 300 builders | GL calls | alloc B/frame |
+|---|---|---|---|---|---|---|
+| official `Top Bar` (reference/) | 31.5 | 16.7 | 0.3 (no BP) | 0.3 (no BP) | 44 | 880 |
+| 0.5.001 light | 30.4 | 13.5 | 4.6 | 14.7 | 46 | 1030 |
+| 0.5.001 gl4 | 24.7 | 16.3 | 3.9 | 13.5 | 30 | 830 |
+| 0.5.002 gl4 lean | 16.8 | 10.1 | 6.8 | 16.1 | 16 | 475 |
+| 0.5.002 gl4 lean+scan | 16.4 | 10.7 | 6.0 | 12.0 | 16 | 350 |
+| 0.5.003 gl4 onedraw | 15.1 | 9.0 | 6.8 | 15.7 | 12 | 235 |
+| 0.5.004 gl4 glyphs | 16.9 | 9.4 | 7.0 | 17.2 | 13 | 140 |
+| 0.5.005 gl4 tuned | 11.7 | 7.9 | 6.9 | 12.6 | 13 | 10 |
+
+| Top Bar Buttons file | idle | hover | changelog | paused | quit dialog open | GL calls idle / hover / dialog | alloc idle / hover / dialog |
+|---|---|---|---|---|---|---|---|
+| official `Top Bar Buttons` (reference/) | 2.2 | 70.1 | 16.1 | 2.0 | 431.8 | 3 / 164 / 1055 | 193 B / 2052 B / 13.6 kB |
+| 0.1.001 lean | 0.8 | 1.4 | 1.4 | 0.8 | 1.5 | 1 / 2 / 1 | 0 / 0 / 0 |
+
+Reproduce: scenario `scen_bench.lua` in the harness folders of this session (not part of the repo).
+
 ### Older variants
 `old_versions/` keeps the 0.4.x line (based on a 2024 top bar) including the 0.4.011 light/gl4 experiments. They do not load on current BAR without fixes and are kept for reference only.
 
