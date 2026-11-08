@@ -1,0 +1,47 @@
+diff --git a/luaui/Widgets/gui_pip/gui_pip.lua b/luaui/Widgets/gui_pip/gui_pip.lua
+index 8b45212..8b7a828 100644
+--- a/luaui/Widgets/gui_pip/gui_pip.lua
++++ b/luaui/Widgets/gui_pip/gui_pip.lua
+@@ -261,6 +261,7 @@ config = {
+ 	pipPerformanceAdjustSpeed = 0.1, -- Exponential smoothing factor (0-1) for the performance rate-limiter. Each frame, contentPerformanceFactor lerps toward its target by this fraction: higher = faster reaction to GPU load spikes, lower = smoother but slower adaptation.
+ 	pipFrameTimeThreshold = 0.007, -- threshold before starting to lower FPS
+ 	pipFrameTimeHistorySize = 10, -- Number of frames to average
++	waterAnimMinRate = 8, -- Minimum cheap-layer re-renders per second that keep the water/lava animation moving. The regular content timer (pipFloorUpdateRate..pipMaxUpdateRate) normally refreshes faster than this, so this only acts as a floor instead of forcing a re-render on every Update
+ 
+ 	CMD_AREA_MEX = GameCMD and GameCMD.AREA_MEX or 10000,
+ 
+@@ -24034,18 +24035,30 @@ function widget:Update(dt)
+ 	end
+ 
+ 	-- Sync lava/water level for R2T redraw triggers
++	-- The water/lava shaders animate with the game frame, so the cached cheap layers have to be
++	-- re-rendered for the animation to advance. The regular content timer already does that at
++	-- the dynamic update rate; marking the content dirty on every Update bypassed that throttle
++	-- (and the units/content stagger), which doubled the cheap-layer renders on water maps.
++	-- Only force a re-render when the last one is older than 1/waterAnimMinRate (animation floor).
++	local waterAnimDue = false
++	if mapInfo.isLava or (mapInfo.hasWater and not mapInfo.voidWater) then
++		local waterAnimInterval = 1 / math.max(1, config.waterAnimMinRate or 8)
++		waterAnimDue = (os.clock() - pipR2T.contentLastUpdateTime) >= waterAnimInterval
++	end
+ 	if mapInfo.isLava then
+-		-- Force R2T content refresh on lava maps so the lava overlay animates
+-		pipR2T.contentNeedsUpdate = true
++		-- Keep the lava overlay animating (rate-limited, see above)
++		if waterAnimDue then
++			pipR2T.contentNeedsUpdate = true
++		end
+ 		-- Also sync dynamic water level from computed tide level
+ 		local lrs = mapInfo.lavaRenderState
+ 		if lrs and lrs.level then
+ 			mapInfo.dynamicWaterLevel = lrs.level
+ 		end
+ 	elseif mapInfo.hasWater then
+-		-- Force R2T content refresh on water maps so the water overlay animates
++		-- Keep the water overlay animating (rate-limited, see above)
+ 		-- (Perlin noise waves + caustics need gameFrames to advance)
+-		if not mapInfo.voidWater then
++		if not mapInfo.voidWater and waterAnimDue then
+ 			pipR2T.contentNeedsUpdate = true
+ 		end
+ 		-- Non-lava water: poll base water level from game rules
