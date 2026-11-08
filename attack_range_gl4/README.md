@@ -16,6 +16,14 @@ previous one, so you can bisect: if a version misbehaves, step back one.
 Except for the v4 harness counts, all numbers are estimates derived from per-frame call counts, not in-game measurements. Please measure
 with the widget profiler (F11 → "By cost") and report back.
 
+## Known trade-offs
+
+- v1+: a cursor ring of a unit that dies or drives away under a motionless cursor can linger for up to ~230 ms
+  (5 Hz fallback trace plus one 30 Hz tick) instead of ~100 ms in the original. Moving the mouse or camera
+  re-traces on the next 30 Hz tick.
+- v2+: when units are selected but produce no ring, the widget no longer touches the stencil buffer at all
+  (the original cleared it in that case). This matches what the original already does when nothing is selected.
+
 ## Installation
 
 1. Copy **one** of the `gui_attackrange_gl4_perf_vN.lua` files into `your_bar_folder/data/luaui/widgets`.
