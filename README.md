@@ -31,6 +31,9 @@ The builder-scan change (lean_scan) is independent of the draw-path steps and ca
 
 Neither has been compared side by side in game yet. Use the "Widget Profiler" widget to compare their Draw/Update milliseconds against the stock "Top Bar".
 
+### Top Bar Buttons (0.1.001 lean)
+`gui_top_bar_buttons_alpha_0.1.001_lean.lua` ("Top Bar Buttons 0.1.001 lean") replaces the stock "Top Bar Buttons" widget (unmodified copy in `reference/`), same buttons, badge, auto-hide, quit/resign and save dialogs, keys and `WG.topbar` fallbacks. Changes: no Update callin (the stock one created three closures per frame for the top bar fallbacks), the strip is rendered once into a texture and drawn with one display list, hover highlight is one cached list per button instead of four immediate-mode rectangles per frame, the changelog pulse is time based, and the dialogs are rebuilt only when something they show changes instead of every frame. Mock numbers per frame, official vs lean: idle 3 vs 1 GL calls, hovering 164 vs 2, quit dialog open about 1055 vs 1, allocation 192 B vs 0 idle and 13 kB vs 0 with the quit dialog open.
+
 ### Older variants
 `old_versions/` keeps the 0.4.x line (based on a 2024 top bar) including the 0.4.011 light/gl4 experiments. They do not load on current BAR without fixes and are kept for reference only.
 
