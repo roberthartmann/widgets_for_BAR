@@ -25,6 +25,7 @@ Each file builds on the previous one. All of them replace the stock "Top Bar"; e
 | `gui_top_bar_alpha_0.5.002_gl4_lean_scan.lua` | lean + cheaper builder scan (GetUnitWorkerTask, no coroutine, no per-pass tables; roughly half the Lua time per frame at 1000 builders) | 15 | 1 (+ display lists) |
 | `gui_top_bar_alpha_0.5.003_gl4_onedraw.lua` | lean + background/UI blits, wind blades and tidal wave folded into the single instanced draw | 11 | 1 |
 | `gui_top_bar_alpha_0.5.004_gl4_glyphs.lua` | onedraw + all texts as glyph instances from a font atlas; no render-to-texture after init except on resize / language change | 13 | 1 |
+| `gui_top_bar_alpha_0.5.005_gl4_tuned.lua` | glyphs + the cheaper builder scan + lower update rates: 10 Hz slow tick, 20 Hz only for fill widths (idle while paused), warning pulse and commander blink computed in the shader, rate texts only when the engine's 30-frame team slow update changed them, value text at most 10 Hz and rounded to steps of 5 between 100 and 999 unless hovered (`gl4.VALUE_STEP`) | 13 | 1 |
 
 The builder-scan change (lean_scan) is independent of the draw-path steps and can be combined with onedraw/glyphs once the comparison shows which parts pay off.
 
