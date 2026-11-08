@@ -9,6 +9,61 @@ Enhance your gaming experience with the new Top Bar Widget for BAR (Beyond All R
 ## Versions
 The `gui_top_bar_alpha.lua` version is the one described here. It is stable :)
 
+### Current variants (0.5.001): buildpower on top of the official top bar
+Both files are the **current official BAR top bar** (an unmodified copy is kept in `reference/` for diffing) plus the buildpower bar. They replace the stock "Top Bar": disable "Top Bar" and enable exactly one of them. The buttons row is no longer part of the top bar in current BAR; keep the stock "Top Bar Buttons" widget enabled.
+
+- `gui_top_bar_alpha_0.5.001_light.lua` ("Top Bar with Buildpower 0.5.001 light"): the official bar's own rendering (static parts rendered once into textures, value bars as display lists rebuilt only when their pixel width changes, texts only when the string changes) extended by a green buildpower bar between metal and energy: used BP fill, reserved BP overlay, percentage text, metal/energy supported-BP markers, wind range strip, stall flash, alerts and tooltips. Options (buildpower bar, eco indicators, wind range, debug tooltip) appear under the widget in the options menu. Safe choice.
+- `gui_top_bar_alpha_0.5.001_gl4.lua` ("Top Bar with Buildpower 0.5.001 gl4"): same features, but every rectangle of the three bars (fills, glow, overlays, flash, slider knobs, markers) is one instance in a GPU instance buffer drawn by one shader, normally a single draw call per frame. Needs the GL4 engine features BAR itself uses; if they are missing or the shader fails to compile the widget prints the reason, recommends the light variant and removes itself.
+
+### Performance ladder (0.5.002 to 0.5.004)
+Each file builds on the previous one. All of them replace the stock "Top Bar"; enable exactly one. GL calls and allocation are mock-harness numbers for a steady frame with the sim running.
+
+| File | Adds | GL calls / frame | Draw calls |
+|---|---|---|---|
+| `gui_top_bar_alpha_0.5.001_gl4.lua` | bars as GPU instances | 29 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.002_gl4_lean.lua` | no Update callin (tick from GameFrame / IsAbove), no per-frame uniforms (engine timeInfo), one texture atlas, no draw-path allocation | 15 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.002_gl4_lean_scan.lua` | lean + cheaper builder scan (GetUnitWorkerTask, no coroutine, no per-pass tables; roughly half the Lua time per frame at 1000 builders) | 15 | 1 (+ display lists) |
+| `gui_top_bar_alpha_0.5.003_gl4_onedraw.lua` | lean + background/UI blits, wind blades and tidal wave folded into the single instanced draw | 11 | 1 |
+| `gui_top_bar_alpha_0.5.004_gl4_glyphs.lua` | onedraw + all texts as glyph instances from a font atlas; no render-to-texture after init except on resize / language change | 13 | 1 |
+| `gui_top_bar_alpha_0.5.005_gl4_tuned.lua` | glyphs + the cheaper builder scan + lower update rates: 10 Hz slow tick, 20 Hz only for fill widths (idle while paused), warning pulse and commander blink computed in the shader, rate texts only when the engine's 30-frame team slow update changed them, value text at most 10 Hz and rounded to steps of 5 between 100 and 999 unless hovered (`gl4.VALUE_STEP`) | 13 | 1 |
+
+The builder-scan change (lean_scan) is independent of the draw-path steps and can be combined with onedraw/glyphs once the comparison shows which parts pay off.
+
+Neither has been compared side by side in game yet. Use the "Widget Profiler" widget to compare their Draw/Update milliseconds against the stock "Top Bar".
+
+### Top Bar Buttons (0.1.001 lean)
+`gui_top_bar_buttons_alpha_0.1.001_lean.lua` ("Top Bar Buttons 0.1.001 lean") replaces the stock "Top Bar Buttons" widget (unmodified copy in `reference/`), same buttons, badge, auto-hide, quit/resign and save dialogs, keys and `WG.topbar` fallbacks. Changes: no Update callin (the stock one created three closures per frame for the top bar fallbacks), the strip is rendered once into a texture and drawn with one display list, hover highlight is one cached list per button instead of four immediate-mode rectangles per frame, the changelog pulse is time based, and the dialogs are rebuilt only when something they show changes instead of every frame. Mock numbers per frame, official vs lean: idle 3 vs 1 GL calls, hovering 164 vs 2, quit dialog open about 1055 vs 1, allocation 192 B vs 0 idle and 13 kB vs 0 with the quit dialog open.
+
+### Benchmark (mock harness, same scenario for every file)
+Lua microseconds per rendered frame at 60 fps with the sim at 30 Hz, median of 3 runs, 1920x1080. "Draw path" = DrawScreen + Update/IsAbove; "BP scan" = GameFrame (the stock top bar has no buildpower tracking, so its GameFrame is ~0.3 us). GL calls = Lua->GL calls per frame. Allocation is per frame with ~384 B of harness overhead already subtracted. Absolute numbers include mock overhead; the ratios are what matters.
+
+| Top bar file | draw path running | draw path paused | BP scan, 10 builders | BP scan, 300 builders | GL calls | alloc B/frame |
+|---|---|---|---|---|---|---|
+| official `Top Bar` (reference/) | 31.5 | 16.7 | 0.3 (no BP) | 0.3 (no BP) | 44 | 880 |
+| 0.5.001 light | 30.4 | 13.5 | 4.6 | 14.7 | 46 | 1030 |
+| 0.5.001 gl4 | 24.7 | 16.3 | 3.9 | 13.5 | 30 | 830 |
+| 0.5.002 gl4 lean | 16.8 | 10.1 | 6.8 | 16.1 | 16 | 475 |
+| 0.5.002 gl4 lean+scan | 16.4 | 10.7 | 6.0 | 12.0 | 16 | 350 |
+| 0.5.003 gl4 onedraw | 15.1 | 9.0 | 6.8 | 15.7 | 12 | 235 |
+| 0.5.004 gl4 glyphs | 16.9 | 9.4 | 7.0 | 17.2 | 13 | 140 |
+| 0.5.005 gl4 tuned | 11.7 | 7.9 | 6.9 | 12.6 | 13 | 10 |
+
+| Top Bar Buttons file | idle | hover | changelog | paused | quit dialog open | GL calls idle / hover / dialog | alloc idle / hover / dialog |
+|---|---|---|---|---|---|---|---|
+| official `Top Bar Buttons` (reference/) | 2.2 | 70.1 | 16.1 | 2.0 | 431.8 | 3 / 164 / 1055 | 193 B / 2052 B / 13.6 kB |
+| 0.1.001 lean | 0.8 | 1.4 | 1.4 | 0.8 | 1.5 | 1 / 2 / 1 | 0 / 0 / 0 |
+
+Reproduce: scenario `scen_bench.lua` in the harness folders of this session (not part of the repo).
+
+### Measuring in game (tools/)
+The stock Widget Profiler wraps every callin in two timer reads, shows a share of a fluctuating total and smooths over 2 s, so for callins of a few microseconds it mostly shows its own overhead and the moment's noise. Two better tools, both user widgets (copy to `data/luaui/widgets`, enable in F11):
+
+- `tools/dbg_layer_bracket_a.lua` + `tools/dbg_layer_bracket_b.lua`: enable both. They sit one layer below and above -95000 (the layer of Top Bar and Top Bar Buttons and of all variants here) and measure, with the microsecond timer, how long everything on that layer takes per DrawScreen, Update and GameFrame: average, median, p95, max and Lua allocation, echoed every 10 s and on `/bracketreport` (`/bracketreset` restarts the window). No per-callin hooks, no smoothing, long windows. Keep the same Buttons widget enabled while comparing top bars, since both share the layer.
+- `tools/dbg_widget_ab_bench.lua`: edit the candidate list at the top, then `/abbench start`. It enables one candidate at a time (plus "none" as baseline), measures the real frame time for 8 s each over 4 rotating rounds and prints per candidate the median frame time, its spread between rounds, p90, allocation and the delta against "none" in microseconds and in percent of the frame. This includes GL driver and engine cost that no Lua profiler sees. Needs an uncapped frame rate (`/vsync 0`, max fps 0), a static camera and a paused game or a replay, otherwise the noise is larger than the differences.
+
+### Older variants
+`old_versions/` keeps the 0.4.x line (based on a 2024 top bar) including the 0.4.011 light/gl4 experiments. They do not load on current BAR without fixes and are kept for reference only.
+
 ## Installation Guide
 
 ### Step 1: Download the Widget
